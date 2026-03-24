@@ -1,0 +1,58 @@
+{
+  "skill_name": "meteora-dlmm-lp",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to LP on a new memecoin/SOL pair on Meteora DLMM. The token just launched 2 hours ago and is super volatile. What bin step should I use, what liquidity shape, and how wide should I set my range?",
+      "expected_output": "Recommends a high bin step (80-200+ bps), suggests Spot or Bid-Ask over Curve, recommends a wide range, warns about extreme IL risk for new launches, mentions dynamic fees as an offset, and advises only risking capital the LP can afford to lose.",
+      "files": [],
+      "expectations": [
+        "Recommends a bin step of 80 bps or higher for a volatile memecoin launch",
+        "Recommends Spot or Bid-Ask shape (not Curve) for a volatile new launch",
+        "Recommends a wide price range to avoid going out of range quickly",
+        "Warns about impermanent loss risk being extreme for new token launches",
+        "Mentions dynamic fees as a mechanism that helps offset IL during volatile periods",
+        "Includes a risk warning about potential for significant capital loss"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I have a SOL/USDC DLMM position on Meteora with a Curve shape, 20 bps bin step, and the active bin is now at the very edge of my range. Price has been trending up. Should I rebalance now or wait? What should I consider?",
+      "expected_output": "Discusses the tradeoffs of rebalancing vs waiting. Explains that at the edge of a Curve position most liquidity is behind them (center-weighted). Considers whether the LP expects price to continue trending or revert. Mentions that rebalancing locks in IL. Suggests practical options.",
+      "files": [],
+      "expectations": [
+        "Explains that a Curve shape concentrates liquidity at the center so the LP has very little active liquidity at the range edges",
+        "Discusses the tradeoff between rebalancing (locks in IL) vs waiting (might go out of range)",
+        "Asks or considers whether the LP expects continued uptrend or mean reversion",
+        "Provides at least two concrete options or courses of action",
+        "Mentions that being out of range means earning zero fees"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I'm sitting on a bag of tokens I want to gradually sell over the next few weeks. Can I use Meteora DLMM to do a DCA sell? How would I set that up - which shape, bin step, and range?",
+      "expected_output": "Confirms DLMM can be used for DCA selling via single-sided liquidity. Recommends Bid-Ask shape for DCA. Explains how to set up single-sided with only the sell token. Discusses bin step and range selection for gradual selling. Explains the mechanics of how bins convert tokens as price moves through them.",
+      "files": [],
+      "expectations": [
+        "Confirms that DLMM supports single-sided liquidity provision for DCA strategies",
+        "Recommends Bid-Ask shape for the DCA sell strategy",
+        "Explains that the LP should deposit only the token they want to sell",
+        "Explains the mechanics: as price moves through bins, tokens get converted/sold",
+        "Provides guidance on setting the price range above current price for a sell DCA"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What are the best SOL/USDC DLMM pools on Meteora right now? I want to find the one with the highest fees relative to TVL. Can you look it up?",
+      "expected_output": "Fetches live data from the Meteora DLMM Data API (dlmm.datapi.meteora.ag) to find SOL/USDC pools, compares them by fee_tvl_ratio, volume, APR, and bin_step, and makes a recommendation based on the real data.",
+      "files": [],
+      "expectations": [
+        "Attempts to fetch data from dlmm.datapi.meteora.ag API",
+        "Looks for SOL/USDC pools specifically using the API",
+        "Compares pools by fee_tvl_ratio or similar fee efficiency metric",
+        "Presents actual data points (volume, fees, TVL, APR) from the API response",
+        "Makes a recommendation grounded in the fetched data, not just general advice"
+      ]
+    }
+  ]
+}
