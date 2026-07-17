@@ -13,6 +13,8 @@ description: >
   (widening or shrinking a live position without closing it), Collect Fee Mode (earning fees in the input
   token vs token Y), liquidity-mining / farm rewards, pool function modes (liquidity mining vs limit
   order), Token-2022 pool due diligence, and which bin step, price range, or shape to choose.
+  Do NOT use for other DEXes (Raydium, Orca, Uniswap, PancakeSwap), Meteora DAMM or Dynamic Vaults,
+  SOL staking, bridging, or general Solana program development.
 ---
 
 # Meteora DLMM LP Expert
