@@ -14,7 +14,7 @@ Read this when you need exact endpoints, required vs. optional params, paginatio
 
 Fetch proactively. If the user gives you a token, pool address, or wallet, pull real data before advising rather than reasoning from hypotheticals. Build URLs like `https://dlmm.datapi.meteora.ag/pools?query=SOL`. Example calls you'll reach for constantly:
 
-- Best SOL/USDC-style pools: `GET /pools/groups?query=SOL&sort_by=fee_tvl_ratio_24h:desc&filter_by=is_blacklisted=false%20%26%26%20volume_24h>=50000`
+- Best SOL/USDC-style pools: `GET /pools?query=SOL&sort_by=fee_tvl_ratio_24h:desc&filter_by=is_blacklisted=false%20%26%26%20volume_24h>=50000`
 - One pool's live state: `GET /pools/5hbf9JP8k5zdrZp9pokPypFQoBse5mGCmW6nqodurGcd`
 - A user's positions in a pool: `GET /positions/{pool_address}/pnl?user={wallet}&status=open`
 - A wallet's open-position pools: `GET /portfolio/open?user={wallet}&page=1&page_size=50`
@@ -31,7 +31,7 @@ Three endpoints that older versions of this skill referenced **do not exist anyw
 
 ## Shared list-query grammar
 
-List endpoints (`/pools`, `/pools/groups`, `/pools/groups/{...}`) accept:
+The `/pools` list endpoint accepts:
 
 - `page` — 1-based page number.
 - `page_size` — **pool lists max 1000; group lists max 100.**
@@ -50,19 +50,17 @@ List endpoints (`/pools`, `/pools/groups`, `/pools/groups/{...}`) accept:
 | Endpoint | Purpose |
 |---|---|
 | `GET /pools` | Paginated pool list. Params: `page`, `page_size` (1–1000), `query`, `sort_by`, `filter_by`. Returns `{ total, pages, current_page, page_size, data[] }`. |
-| `GET /pools/groups` | One row per token pair (compare pairs). Params: list grammar + `volume_tw`, `fee_tvl_ratio_tw`. `page_size` max 100. |
-| `GET /pools/groups/{lexical_order_mints}` | Every pool in one pair group (compare bin-step / fee-tier variants side-by-side). Params: list grammar; `page_size` max 100. Returns a full pool list. |
 | `GET /pools/{address}` | Single pool, full `PoolResponse`. No query params. |
 
-Recipe for "which pool for pair X?": call `/pools/groups?query=<pair>` sorted `fee_tvl_ratio_24h:desc` with `filter_by=is_blacklisted=false && volume_24h>=<x>`, pick a group by `max_fee_tvl_ratio` + `total_volume`, then call `/pools/groups/{lexical_order_mints}` to compare each pool's `volume["24h"]`, `fees["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, and `pool_config.bin_step`. Group rows aggregate `volume_tw` as a SUM (default `volume_24h`) and `fee_tvl_ratio_tw` as a MAX (default `fee_tvl_ratio_24h`) — hence the group field is named `max_fee_tvl_ratio`.
+**Docs-only, not live:** the docs also describe `GET /pools/groups` and `GET /pools/groups/{lexical_order_mints}`, but the deployed API does not serve them — the router parses `groups` as a pool address and returns `invalid_pubkey`. When docs and API disagree, trust the live OpenAPI spec at `GET /api-docs/openapi.json` (which also exposes live-only `/stats/daily/volume`, `/stats/daily/trading_fees`, `/stats/daily/protocol_fees`).
 
-`GroupResponse` row: `lexical_order_mints` (group key = two mints in lexical order joined by `-`), `group_name`, `token_x`/`token_y` (mint address strings here, NOT TokenMetrics), `pool_count`, `total_tvl`, `total_volume`, `max_fee_tvl_ratio`, `has_farm`.
+Recipe for "which pool for pair X?": call `/pools?filter_by=token_x=<mintA> %26%26 token_y=<mintB>&sort_by=fee_tvl_ratio_24h:desc` and repeat with the mints swapped (pairs exist in both orientations), or use `query=<symbol>` and filter client-side. Then compare each pool's `volume["24h"]`, `fees["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, and `pool_config.bin_step`. Field-tested `filter_by` behavior on the live API: text filters match **exact mint addresses only** (`token_x=<mint>` works; `name=SOL-USDC` and symbol values return 0 rows), and the documented multi-value OR syntax `=[a|b]` has been observed returning 0 rows — prefer two separate calls. One more field-tested note: bare `urllib`-style clients can get HTTP 403 (user-agent filtering) — `curl` works.
 
 ## Pool metrics shape (READ THIS — the field names people get wrong)
 
 On the pool object, `volume`, `fees`, `fee_tvl_ratio`, and `protocol_fees` are **`TimeWindowData` objects keyed by `30m/1h/2h/4h/12h/24h`** — not scalars. Read `volume["24h"]`, `fee_tvl_ratio["24h"]`, `fees["24h"]`.
 
-There is **NO `trade_volume_24h` and NO `fees_24h` field** — those names do not exist. When you quote a fee/TVL ratio, always name its window, e.g. `fee_tvl_ratio["24h"] = 0.8%`, because the same object also carries `fee_tvl_ratio["1h"]` etc. (The `/pools/groups` endpoint is the exception: it returns the scalar `max_fee_tvl_ratio`, the MAX across the chosen `fee_tvl_ratio_tw` window.)
+There is **NO `trade_volume_24h` and NO `fees_24h` field** — those names do not exist. When you quote a fee/TVL ratio, always name its window, e.g. `fee_tvl_ratio["24h"] = 0.8%`, because the same object also carries `fee_tvl_ratio["1h"]` etc.
 
 `apr` and `apy` ARE scalars — both are 24-hour figures. `farm_apr`/`farm_apy` (LM rewards) exist and are scalars too.
 
@@ -192,7 +190,7 @@ No params. Response `ProtocolMetricsResponse`: `total_tvl` (TotalTVL), `volume_2
 
 ## Recipe index (cross-links to SKILL.md workflows)
 
-- **Pool selection:** `/pools/groups` (macro pick by `max_fee_tvl_ratio`, `total_volume`) → `/pools/groups/{lexical_order_mints}` (compare bin-step variants by `volume["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, `bin_step`), `filter_by=is_blacklisted=false && volume_24h>=<x>`.
+- **Pool selection:** `/pools` with `filter_by` on the two mint addresses (both orderings) or `query=<symbol>`, sorted `fee_tvl_ratio_24h:desc` with `filter_by=is_blacklisted=false && volume_24h>=<x>`; compare bin-step variants by `volume["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, `pool_config.bin_step`.
 - **Token due diligence before deposit:** `TokenMetrics.is_verified`, `freeze_authority_disabled`, `holders`, `market_cap` + pool `is_blacklisted`, `tags`, `launchpad`.
 - **Data-driven rebalance / exit:** `/portfolio/open` → `positionsOutOfRange[]`/`outOfRange`; `/positions/{pool}/pnl` → `poolActiveBinId` vs `[lowerBinId, upperBinId]`, `isOutOfRange`, `feePerTvl24h`.
 - **Hold vs claim vs close:** `/positions/{pool}/pnl` → `allTimeFees` vs `pnlUsd`, `unrealizedPnl.unclaimedFeeTokenX/Y`, `unclaimedRewardTokenX/Y`.

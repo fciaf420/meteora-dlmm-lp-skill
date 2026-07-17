@@ -231,9 +231,15 @@ Base URL `https://dlmm.datapi.meteora.ag`, no auth, 30 req/s. This is your engin
 
 ### Endpoint map (verified)
 **Pool discovery / detail**
-- `GET /pools` — paginated pool list. Params `page`, `page_size` (≤1000), `query`, `sort_by`, `filter_by`.
-- `GET /pools/groups` — one row per token pair; pick a pair by `max_fee_tvl_ratio`, `total_volume`, `pool_count`.
-- `GET /pools/groups/{lexical_order_mints}` — every pool for one pair; **the right call to compare bin-step variants side by side**.
+- `GET /pools` — paginated pool list. Params `page`, `page_size` (≤1000), `query`, `sort_by`
+  (`<metric>_<window>:<direction>`, e.g. `fee_tvl_ratio_24h:desc`), `filter_by` (exact **mint addresses** —
+  `token_x=<mint> && token_y=<mint>`; symbol/name filters match nothing). **To compare a pair's bin-step variants**,
+  call `/pools` with `filter_by` on the two mints (run both token orderings) sorted by `fee_tvl_ratio_24h:desc`,
+  or `query=<symbol>` and filter client-side.
+- **Docs-only, not live:** the docs describe `GET /pools/groups` and `/pools/groups/{lexical_order_mints}`, but the
+  deployed API does not serve them (the router parses `groups` as a pool address → `invalid_pubkey` error). When docs
+  and API disagree, trust the live spec at `GET /api-docs/openapi.json`. Live-only extras there:
+  `/stats/daily/volume`, `/stats/daily/trading_fees`, `/stats/daily/protocol_fees`.
 - `GET /pools/{address}` — single pool (full `PoolResponse`).
 - `GET /pools/{address}/ohlcv` — candles (realized range/volatility).
 - `GET /pools/{address}/volume/history` — volume/fees/protocol_fees buckets over time.
@@ -273,8 +279,10 @@ also fails). Use `/portfolio/open`, `/portfolio`, and `allTimeFees` / `/total_cl
 On the pool object, `volume`, `fees`, `fee_tvl_ratio`, and `protocol_fees` are **`TimeWindowData` objects** keyed
 by `30m`/`1h`/`2h`/`4h`/`12h`/`24h`. Read `volume["24h"]`, `fees["24h"]`, `fee_tvl_ratio["24h"]` — there are **no**
 scalar `trade_volume_24h`, `fees_24h`, or scalar `fee_tvl_ratio` fields. `apr`/`apy` are 24h scalars; `farm_apr`/
-`farm_apy` exist when `has_farm`. Always name the window when quoting a ratio (e.g. `fee_tvl_ratio["24h"] = 0.8%`);
-the `/pools/groups` endpoint instead returns `max_fee_tvl_ratio` (the MAX across the chosen window).
+`farm_apy` exist when `has_farm`. Always name the window when quoting a ratio (e.g. `fee_tvl_ratio["24h"] = 0.8%`).
+Pool parameters (`bin_step`, `base_fee_pct`, `max_fee_pct`, `protocol_fee_pct`, `collect_fee_mode`) sit nested under
+`pool_config`, not at the top level. Note: live `pool_config.protocol_fee_pct` can differ from the documented standard
+(pools have been observed at 5%) — quote the live value, it is per-pool configuration.
 
 ### Data-driven rebalance signal
 Do not eyeball it. Pull `/portfolio/open` → read `positionsOutOfRange[]` / `outOfRange`, or pull
