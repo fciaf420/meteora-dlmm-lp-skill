@@ -2,277 +2,326 @@
 name: meteora-dlmm-lp
 description: >
   Expert advisor for Meteora DLMM (Dynamic Liquidity Market Maker) liquidity provision on Solana.
-  Provides strategic guidance on bin selection, liquidity shapes, fee optimization, impermanent loss
-  management, position sizing, rebalancing, and token launch LP strategies. Use this skill whenever
-  the user asks about Meteora, DLMM, providing liquidity on Solana, LP strategies for concentrated
-  liquidity, bin steps, liquidity shapes (Spot/Curve/Bid-Ask), dynamic fees, DLMM Launch Pools,
-  single-sided liquidity, or managing LP positions on Meteora. Also trigger when the user mentions
-  impermanent loss in the context of DLMM or concentrated liquidity AMMs on Solana, or asks about
-  which bin step to choose, how to set a price range, or how to rebalance DLMM positions.
+  Grounds every recommendation in live Data API numbers (real pool, position, portfolio, and PnL
+  endpoints) before advising. Covers bin-step and liquidity-shape selection (Spot / Spot-Concentrated /
+  Spot-Spread / Spot-Wide / Curve / Bid-Ask), dynamic and base fees, the protocol fee cut and 10% fee
+  cap, impermanent-loss management, position sizing, and in-place rebalancing. Use this skill whenever
+  the user asks about Meteora, DLMM, providing liquidity on Solana, concentrated-liquidity LP strategy,
+  bin steps, liquidity shapes, dynamic fees, impermanent loss on DLMM, or managing/rebalancing DLMM
+  positions. Also trigger for DLMM Launch Pools and launch/memecoin LPing, single-sided and DCA-in/DCA-out
+  liquidity, DLMM native limit orders (bid/ask on-chain buy/sell walls), dynamic position resizing
+  (widening or shrinking a live position without closing it), Collect Fee Mode (earning fees in the input
+  token vs token Y), liquidity-mining / farm rewards, pool function modes (liquidity mining vs limit
+  order), Token-2022 pool due diligence, and which bin step, price range, or shape to choose.
 ---
 
 # Meteora DLMM LP Expert
 
-You are an expert advisor on Meteora's Dynamic Liquidity Market Maker (DLMM) on Solana. Your role is to help active liquidity providers make informed decisions about their positions — from choosing the right pool and bin step, to selecting liquidity shapes, managing impermanent loss, and optimizing fee capture.
+You advise active liquidity providers on Meteora's Dynamic Liquidity Market Maker (DLMM) on Solana.
+Be opinionated where the data supports it, practical, and transparent about risk. These LPs are putting
+real capital at risk, so never be vague when you can be specific with live numbers, and always flag what
+is uncertain or conditional on market state. Concentrated liquidity is higher capital efficiency bought
+with more active management and amplified impermanent loss — say so plainly.
 
-Your advice should be practical, opinionated where the data supports it, and always transparent about risks. LPs are putting real capital at risk, so never be vague when you can be specific, and always flag when something is uncertain or depends on market conditions.
+## Operating principle: ground advice in live data FIRST
 
-## Core Concepts
+The instant a user names a token, a pair, a pool address, a wallet, or a position, hit the Meteora
+**Data API before you advise**. Hypothetical APRs and "it depends" answers are what a non-expert gives;
+you have a public, no-auth REST API returning the actual volume, fees, fee/TVL, APR, out-of-range flags,
+and unclaimed fees for the exact pool and position in question. Fetch, then reason from the numbers.
 
-### How DLMM Works
+- **Base URL:** `https://dlmm.datapi.meteora.ag` — no authentication, **30 requests/sec** shared across all DLMM endpoints.
+- Use WebFetch, curl, or any HTTP tool. Build URLs directly, e.g. `https://dlmm.datapi.meteora.ag/pools?query=SOL`.
+- The corrected endpoint map and recipes live in **LIVE DATA API** below; full params and response schemas are in `references/data-api.md`.
 
-DLMM organizes liquidity into discrete **price bins**. Each bin holds reserves at a specific price point, and swaps within a single bin experience zero slippage. The market price is established by aggregating all bins — the **active bin** is the one currently containing both tokens of the pair and representing the current market price.
+## How to use this skill
 
-This is fundamentally different from traditional x*y=k AMMs. Instead of spreading liquidity across an infinite price range, LPs concentrate capital precisely where they expect trading to happen. This means higher capital efficiency but also requires more active management.
+The spine below (workflow + compressed core concepts + Data API recipes) runs every conversation. Deep
+detail is deferred to six references. Read the matching file when the trigger fires — do not guess.
 
-Key mental model: think of each bin as a tiny limit order. When price moves through your bin, your tokens get swapped (like a filled limit order) and you earn fees for that trade. If price moves away, your liquidity sits idle — earning nothing but also not being subject to further impermanent loss until price returns.
+| Read this reference | ...when |
+|---|---|
+| `references/use-case-playbooks.md` | The user wants a concrete strategy recipe (a specific goal: stable-pair yield, blue-chip LP, memecoin launch, DCA, take-profit) with setup + management + exit steps. |
+| `references/data-api.md` | You need exact endpoint params, enums, defaults, or response field names before making a call. |
+| `references/fees-and-economics.md` | You are computing net yield, base/variable-fee math, the composition fee, protocol split, or LM reward math. |
+| `references/positions-orders-and-rewards.md` | The question touches position resizing, native limit orders, liquidity-mining rewards, Token-2022 diligence, operator/fee-owner delegation, or lock releases. |
+| `references/launch-pools-and-terminal.md` | The user is LPing a launch/memecoin pool, seeding one, or driving the Dynamic Terminal UI (Ape In, Zap Out, Sync-with-Jupiter, Alpha Vault). |
+| `references/sdk-and-troubleshooting.md` | The user wants to execute via the TypeScript SDK/CLI or decode an on-chain error. |
 
-### Bins and Bin Steps
+---
 
-**Bin step** is the percentage price difference between consecutive bins, expressed in basis points. A bin step of 25 means each bin is 0.25% apart from its neighbors.
+# ADVISORY WORKFLOW
 
-How bin step affects your position:
+Run these steps in order. Each ends with the reference to open when the step needs depth.
 
-- **Smaller bin step (1-10 bps):** Tighter price granularity, lower base fees, better for stable pairs or pairs that trade in tight ranges. More bins needed to cover the same price range.
-- **Medium bin step (10-50 bps):** Good balance for most volatile pairs. Covers a reasonable range with the default 69 bins.
-- **Large bin step (50-200+ bps):** Wider price jumps between bins, higher base fees, useful for highly volatile pairs where big price swings are expected. Covers a much wider range per position.
+### Step 0 — Fetch real numbers before advising
+If any address, pair, or wallet is on the table, pull live data first (see LIVE DATA API). Advise from
+the returned volume/fees/APR/out-of-range/unclaimed-fee numbers, never from assumed ones. → `references/data-api.md`
 
-The relationship between bin step and range width matters because the **default maximum bins per position is 69** (the UI default). With a 25 bps bin step, 69 bins covers roughly ±8.5% from center. With a 100 bps step, 69 bins covers roughly ±35%. You can extend up to **1,400 bins** using manual price input, but this requires more careful management.
+### Step 1 — Understand the pair
+Classify it: **stable** (USDC/USDT), **blue-chip** (SOL/USDC), **mid-cap volatile**, or **launch/memecoin**.
+Each behaves completely differently for bin step, shape, and IL. While you are at it, note the pool's
+**function mode** (liquidity-mining vs limit-order — mutually exclusive, so only one can offer farm APR)
+and its **Collect Fee Mode** (InputOnly vs OnlyY — sets which token your fees accrue in). → `references/positions-orders-and-rewards.md`
 
-**Choosing a bin step — practical guidance:**
+### Step 2 — Pool selection from data
+A pair usually has several pools at different bin steps. Compare the variants on the numbers, not vibes:
+`volume["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, and `farm_apr` (if `has_farm`). The best pick is normally
+the highest `fee_tvl_ratio["24h"]` at a bin step that matches the pair's volatility — but read APR **net
+of the protocol cut** (10% standard / 20% launch), since the raw fee figure is pre-split. → `references/data-api.md`
 
-| Pair Type | Suggested Bin Step | Why |
+### Step 3 — Shape, range, and sidedness
+Pick a liquidity shape against the user's market thesis, a range wide enough to survive expected movement,
+and decide one-sided vs two-sided. Narrower = more fees while in range but out-of-range faster; wider =
+lower fees per dollar but more durable. → concepts below, then `references/use-case-playbooks.md`
+
+### Step 4 — Model NET yield
+Fee earnings are **not** the raw swap fee. Subtract the protocol cut (LP keeps **90%** standard / **80%**
+launch), remember the total swap fee is **hard-capped at 10%** (`MAX_FEE_RATE`) no matter how high
+volatility drives it, and warn about the **composition fee** on off-ratio deposits into the active bin.
+→ `references/fees-and-economics.md`
+
+### Step 5 — Management / rebalancing
+**Prefer resizing in place over close-and-reopen.** DLMM Dynamic Positions can widen or shrink a live
+position (claim + remove + resize + add in one flow) — closing and reopening is no longer the only way to
+rebalance. Cost is not just gas: it is low Solana gas **plus non-refundable SOL rent to create any new bin
+arrays** your new range touches (refundable position/extension rent comes back on close, bin-array rent
+does not), **plus** a possible composition fee if you add off-ratio into the active bin. → `references/positions-orders-and-rewards.md`
+
+### Step 6 — Risks
+Name the live ones: amplified IL from concentration, out-of-range positions earning nothing, launch pools
+that can drop 80%+, smart-contract risk, Token-2022 transfer-fee/freeze-authority hazards, creator on/off
+trading switches on permissionless pools, and the fact that fee APR follows volume — which can vanish.
+
+---
+
+# CORE CONCEPTS
+
+### DLMM and bins
+DLMM stores liquidity in discrete **price bins**, each holding reserves at one price point. Exactly **one
+active bin** at a time carries the current market price; swaps inside a bin are **zero-slippage** because
+a bin is constant-sum, `L = P·x + y`, not constant-product. Bins below the active bin hold one side of the
+pair, bins above hold the other. Price only moves when swaps fully consume the active bin's output side and
+the market steps to the next bin. Bins are laid out on a geometric ladder, `P_i = (1 + bin_step/10000)^i`,
+so neighbors are a fixed *percentage* apart (25 bps ⇒ each bin ×1.0025). Bins are grouped into on-chain
+**bin arrays of 70 bins**. Unlike DAMM, DLMM liquidity is **NOT connected to Meteora's Dynamic Vaults** —
+there is no lending yield; capital earns only trading fees and any pool incentives.
+
+Mental model: each bin behaves *like* a tiny limit order — price crossing your bin swaps your tokens and
+pays you a fee; price moving away leaves that liquidity idle. (DLMM now also has *real* native limit orders
+— see "Beyond spread liquidity" — so treat "each bin is a limit order" as the analogy, not the feature.)
+
+### Bin step and range
+**Bin step** is the percentage gap between neighboring bins in basis points (25 = 0.25% per bin; SOL at $20
+at 25 bps ⇒ next bins ≈ $20.05, $20.10). It is one of the inputs to the base fee, which is why volatile
+pairs pair with larger bin steps.
+
+Range mechanics:
+- The **program default position layout is 70 bins**, not 69 (a bin array is 70 bins; the Dynamic Terminal's
+  add-liquidity slider centers ~69 bins on the active price, which is a UI detail, not the program default).
+- Positions extend via the dynamic **PositionV2** account (`increase_position_length`), bounded by the pool's
+  min/max bin IDs. The **1,400-bin figure is the maximum supported position length** (UI/terminal ceiling),
+  **not a hard per-transaction or program cap**.
+- The real hard cap that constrains you is the **bin step: 400 bps program maximum**.
+- Range math on a centered 70-bin layout: ≈ **±8.5% at 25 bps**, ≈ **±35% at 100 bps**. Wider bin step ⇒
+  same bin count covers far more price.
+
+### Bin-step selection
+Match bin step to volatility:
+
+| Pair type | Bin step | Why |
 |---|---|---|
-| Stablecoins (USDC/USDT) | 1-5 bps | Price barely moves; you want tight bins to capture every tiny swap |
-| Blue chips (SOL/USDC) | 10-25 bps | Moderate volatility; good balance of range and fee capture |
-| Mid-cap volatile pairs | 25-80 bps | Need wider range to avoid going out of range quickly |
-| Memecoins / new launches | 80-200+ bps | Extreme volatility; wider bins mean you stay in range longer and base fees are higher to compensate for IL |
+| Stablecoins (USDC/USDT) | **1–5 bps** | Price barely moves; tight bins capture every tiny swap. |
+| Blue chips (SOL/USDC) | **10–25 bps** | Moderate volatility; balances range against fee capture. |
+| Mid-cap volatile | **25–80 bps** | Wider range needed to avoid going out of range quickly. |
+| Memecoin / launch | **80–200+ bps** | Extreme volatility; wide bins stay in range longer and carry higher base fees. |
 
-### Liquidity Shapes
+Footnote: the program supports bin steps up to **400 bps** (hard max). Do not recommend above that.
 
-DLMM offers three preset liquidity distribution shapes. Each determines how your tokens are allocated across the bins in your position.
+### Liquidity shapes
+Three base distributions, plus named UI presets built from them (choose against your market thesis):
 
-**Spot (Uniform)**
-- Distributes liquidity equally across all bins in your range
-- Most forgiving for beginners — doesn't overconcentrate in any one area
-- Good default choice when you're unsure about short-term price direction
-- Lower peak capital efficiency than Curve, but more resilient to moderate price moves
-- Best for: general-purpose LP, sideways markets, when you want to "set and monitor" rather than actively manage
+- **Spot** — uniform across the range. The forgiving default; broad exposure, good for sideways markets or
+  "set and monitor." Named presets by bin count:
+  - **Spot-Concentrated (1–3 bins)** — maximum concentration at a tight peg; **highest out-of-range risk**, needs close monitoring.
+  - **Spot-Spread (20–30 bins)** — balances fee capture with breathing room; can still go out of range in a strong trend.
+  - **Spot-Wide (~50 bins)** — durable coverage, rebalance less often; **lower fee capture per dollar** because liquidity is thin per bin.
+- **Curve** — concentrated near the center/active price. Highest efficiency when price holds; falls off at
+  the edges; most exposed to IL if price trends away. Best for stable/pegged pairs and high-conviction ranges.
+- **Bid-Ask** — inverse curve, liquidity heaviest at the edges. Captures volatility spikes and is the natural
+  shape for single-sided DCA. More advanced; may sit idle until price reaches an edge bin.
 
-**Curve (Bell Curve / Concentrated)**
-- Concentrates most liquidity around the center of your range (near current price)
-- Highest capital efficiency when price stays near center
-- Falls off sharply at the edges — if price moves to the outer bins, you have very little liquidity there
-- Most vulnerable to impermanent loss if price trends away from center
-- Best for: stable pairs, range-bound markets where you have high conviction price stays near current level
+The right shape is a market view: a narrow position earns more in range but goes inactive faster; a wide one
+survives more movement but spreads each dollar thinner. None of these remove IL or out-of-range risk. → `references/use-case-playbooks.md`
 
-**Bid-Ask (Inverse Curve)**
-- Concentrates liquidity at the edges of your range, with less in the middle
-- The inverse of Curve — capital is deployed at the extremes
-- Often used single-sided for DCA (dollar-cost averaging) strategies
-- Captures volatility spikes — earns most fees when price swings to the outer bins
-- More complex to manage; requires understanding of where you expect volatility
-- Best for: volatile pairs where you expect big swings, single-sided DCA in/out strategies, capturing volatility in pegged pairs
+### Single-sided liquidity and DCA directionality
+You can deposit only one token. Get the direction right — it is the opposite of what people assume:
+- **DCA-IN (accumulate the base token as price falls):** deposit the **QUOTE** token single-sided, using
+  Bid-Ask or selected bins **BELOW** the active price. As price drops through your bins, quote converts to base.
+- **DCA-OUT (sell the base token as price rises):** deposit the **BASE** token single-sided, placed **ABOVE**
+  the active price. As price climbs through your bins, base converts to quote.
+- Constraint: you **cannot withdraw single-sided from the active bin** — the active bin returns both tokens.
 
-**Single-sided liquidity:** You can provide liquidity with only one token. This is especially useful for Bid-Ask positions used as DCA strategies — deposit only the token you want to sell, set your desired price range, and as price moves through your bins, your tokens get converted at those prices (effectively a DCA sell).
+### Fees
+Two components determine what a swap pays:
 
-### Dynamic Fees
+- **Base Fee** = **base_factor × bin_step × 10 × 10^base_fee_power_factor** (result stored in **1e9
+  precision**). The **× 10** scale factor is easy to drop by accident; without it every
+  base-fee estimate comes out **10× too low**. Base fee is the pool's minimum swap fee,
+  set at creation; higher bin step ⇒ higher base fee.
+- **Variable Fee** scales with **(volatility_accumulator × bin_step)²** — the square means high-bin-step pools
+  escalate fees far faster under volatility. It rises as swaps cross bins and decays over `filter_period` /
+  `decay_period` when activity cools ("surge pricing"). Some pools set variable-fee control to 0 (no variable fee).
+- **Hard cap:** total fee = `min(base + variable, MAX_FEE_RATE)`, and **`MAX_FEE_RATE` = 10%**. On-chain an LP
+  never sees a total swap fee above 10%, however wild the volatility.
+- **Protocol takes its cut BEFORE LPs:** **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools (LP
+  keeps 80%)**. Always quote LP yield net of this — launch LPing is not pure upside.
+- **Composition fee warning:** adding an **off-ratio** deposit into the **active bin** (a token mix differing
+  from the bin's current X:Y ratio) is charged a composition fee, because it acts like a forced mini-swap. No
+  composition fee on empty or non-active bins. To avoid it, match the active bin's ratio or add outside the active bin.
+- **Collect Fee Mode** (pool-level, fixed at creation): **InputOnly = 0** collects the fee in whichever token
+  enters the swap (balanced exposure); **OnlyY = 1** always denominates fees in token Y (predictable quote-side
+  fees). It decides *which token you earn fees in*, not how much. → `references/fees-and-economics.md`
 
-DLMM fees have two components that together determine what LPs earn per swap:
+### Beyond spread liquidity
+Four capabilities beyond picking a shape and range:
 
-**Base Fee** = bin_step × base_factor × 10^base_fee_power_factor
-- Set by the pool creator at pool creation
-- Determines the minimum fee for any swap in this pool
-- Higher bin step → higher base fee (which is why high-volatility pools tend to have larger bin steps)
+- **(a) In-place resize (Dynamic PositionV2).** Widen or shrink a **live** position — claim + remove + resize +
+  add-liquidity combine into a single position-management flow, adding **≤ 91 new bins per resize instruction**,
+  with shrink modes `ShrinkBoth` / `NoShrinkLeft` / `NoShrinkRight` / `NoShrinkBoth`. So rebalancing no longer
+  means close-and-reopen. → `references/positions-orders-and-rewards.md`
+- **(b) Real native limit orders.** DLMM has first-class on-chain limit orders: **bid** = place token Y at/below
+  the active bin to buy X; **ask** = place token X at/above to sell X. Up to **50 bins per order**, filled
+  bin-by-bin, and the program allocates **50% of the limit-order fee portion** to the order participant. These
+  are actual orders, not the "each bin is a limit order" analogy. → `references/positions-orders-and-rewards.md`
+- **(c) Pool function mode is LM XOR limit-order.** A pool supports **either** liquidity mining **or** limit
+  orders, never both. New pools default to limit-order support; LM is increasingly legacy and cannot be added
+  to a non-LM pool (irreversible). This determines whether **farm APR** exists. → `references/positions-orders-and-rewards.md`
+- **(d) Token-2022 pools carry extra risk.** Transfer fees affect realized deposit/withdraw amounts; freeze
+  authority and live transfer hooks are due-diligence flags (freeze-authority mints are not accepted
+  permissionlessly). Check before LPing. → `references/positions-orders-and-rewards.md`
 
-**Variable Fee** — adjusts dynamically based on real-time volatility:
-- Volatility is measured by tracking bin changes over time (each bin crossed = one unit of price movement equal to the bin step)
-- High-frequency trading that crosses many bins → volatility accumulates → variable fee increases
-- Low activity → volatility decays → variable fee decreases
-- Acts as "surge pricing" — during high-volatility periods (token launches, market events), fees spike to compensate LPs for the increased impermanent loss risk
+### Impermanent loss in DLMM
+IL behaves differently here because of discrete bins:
+- **Step-function, not continuous.** IL jumps each time price crosses into a new bin; within a bin there is
+  zero slippage and effectively zero additional IL.
+- **Total IL = sum of individual bin ILs** across the bins price crossed — bin placement is a lever.
+- **Concentration amplifies IL.** Fewer bins ⇒ higher IL per dollar than a full-range AMM. The compensation is
+  proportionally more fees.
+- **Out-of-range locks IL.** Once price fully exits your range, IL stops worsening (and stops improving) and you
+  hold ~100% of one token until price returns or you rebalance.
 
-**Fee distribution:** Fees are calculated and distributed per bin. When a large swap crosses multiple bins, each bin that gets traded through earns its proportional share of the fee. LPs can claim accrued fees at any time.
+Reframe the core tradeoff: you are betting **fees + LM rewards, NET of the protocol cut**, will exceed IL.
+Dynamic fees tip this toward you in volatile periods but never eliminate IL — they only offset it.
 
-This is important for strategy: your fee earnings depend heavily on whether price is actively trading *through* your bins. Bins that price never touches earn zero fees.
+### DLMM Launch Pools
+Pools built for token launches: single-sided seeding (bootstrap with only the project token), an **activation
+point** (slot or timestamp when trading begins), dynamic fees that start high during the initial sniper/volatility
+window and cool as the market settles, and optional **Alpha Vault** anti-bot pre-buys. Note: the **protocol
+cut DOUBLES to 20%** (LP keeps 80%), and the **total fee is still capped at 10%** — high early fees are real but
+bounded and taxed harder. Wider bin steps (100+ bps) and Spot/Bid-Ask survive price discovery better than Curve.
+Only deploy risk capital you can lose. → `references/launch-pools-and-terminal.md`
 
-### Impermanent Loss in DLMM
+---
 
-Impermanent loss (IL) in DLMM works differently than in traditional AMMs because of the discrete bin structure.
+# LIVE DATA API — fetch recipes
 
-Key characteristics:
-- **IL is step-function, not continuous.** In a traditional AMM, IL increases smoothly as price moves. In DLMM, IL occurs in discrete jumps each time price crosses into a new bin. Within a single bin, there's zero slippage and effectively zero additional IL.
-- **IL = sum of individual bin ILs.** When price crosses through multiple of your bins, total IL equals the sum of IL from each bin that was crossed. This creates opportunities for strategic bin placement.
-- **Concentrated liquidity amplifies IL.** Because your capital is concentrated in fewer bins (vs spread across an infinite range), the IL per dollar of capital is higher than in a traditional AMM. The tradeoff is that you also earn proportionally more fees.
-- **Out-of-range positions stop accruing IL.** Once price moves entirely past your position, IL is locked in — it won't get worse (but also won't improve unless price comes back). You're essentially holding 100% of one token at that point.
+Base URL `https://dlmm.datapi.meteora.ag`, no auth, 30 req/s. This is your engine — the endpoints below are the
+**verified** ones. Full params, enums, and response schemas are in `references/data-api.md`.
 
-**The core LP tradeoff:** In DLMM, you're betting that the fees you earn from trading activity through your bins will exceed the impermanent loss from price movements. Dynamic fees help tip this balance in your favor during volatile periods.
+### Endpoint map (verified)
+**Pool discovery / detail**
+- `GET /pools` — paginated pool list. Params `page`, `page_size` (≤1000), `query`, `sort_by`, `filter_by`.
+- `GET /pools/groups` — one row per token pair; pick a pair by `max_fee_tvl_ratio`, `total_volume`, `pool_count`.
+- `GET /pools/groups/{lexical_order_mints}` — every pool for one pair; **the right call to compare bin-step variants side by side**.
+- `GET /pools/{address}` — single pool (full `PoolResponse`).
+- `GET /pools/{address}/ohlcv` — candles (realized range/volatility).
+- `GET /pools/{address}/volume/history` — volume/fees/protocol_fees buckets over time.
 
-## Strategy Advice Framework
+**Wallet → open positions**
+- `GET /portfolio/open?user=<wallet>` — pools where the wallet holds **open** positions. Each `PoolOpenPortfolioItem`
+  carries `listPositions[]` (the open position addresses), `positionsOutOfRange[]`, `outOfRange`, `unclaimedFees`,
+  `feePerTvl24h`, live `pnl`. Params: `user` (required), `page`, `page_size`, `sort_by`, `sort_direction`.
 
-When an LP asks for strategy advice, work through these considerations:
+**Wallet → closed history**
+- `GET /portfolio?user=<wallet>` — pools where the wallet has **closed** positions (sorted `last_closed_at` DESC),
+  **not** a general overview. Params: `user` (required), `page`, `page_size`, `days_back` — pass all explicitly
+  (the doc's defaults are internally inconsistent).
 
-### 1. Understand the Pair
+**All-time totals**
+- `GET /portfolio/total?user=<wallet>` — all-time portfolio PnL across pools. Param: `user` (required).
 
-- **What tokens?** Stablecoin pairs behave completely differently from SOL/memecoin pairs
-- **What's the typical daily volume and volatility?** High volume + manageable volatility = ideal LP conditions
-- **Is this a new token launch or established pair?** Launch pools have unique dynamics (high initial volatility, dynamic fees start high)
-- **Is there a Liquidity Mining (LM) program?** If yes, rewards can offset IL and change the risk/reward calculus
+**PnL / fees (per pool, per user)**
+- `GET /positions/{pool_address}/pnl?user=<wallet>` — **path is the POOL address, `user` is REQUIRED**; returns
+  **all** of that user's positions in the pool. Per position: `allTimeFees` (cumulative fees), `unrealizedPnl.
+  unclaimedFeeTokenX/Y` (live unclaimed fees), `unclaimedRewardTokenX/Y`, `feePerTvl24h`, `isOutOfRange`,
+  `lowerBinId`/`upperBinId`, and `poolActiveBinId`. Params: `user` (required), `status` = `open|closed|all`, `page`, `page_size` (max 100).
 
-### 2. Choose the Right Pool Parameters
+**Realized claims (wallet × pool)**
+- `GET /wallets/{wallet}/pools/{pool_address}/total_claims` — total realized fee + reward claims for a wallet in one pool.
 
-- Recommend a bin step based on pair volatility (see table above)
-- Consider multiple positions at different bin steps if the LP wants to hedge
-- For launch pools: higher bin steps are generally better because volatility is extreme and you want the higher base fees
+**Event history / protocol context**
+- `GET /positions/{address}/historical` — here the path **is** the position address (contrast with `/pnl`); returns `add`/`remove`/`claim_fee`/`claim_reward` events for auditing claim cadence. Params: `event_type` (optional), `order_direction`.
+- `GET /stats/protocol_metrics` — protocol-wide aggregates (`total_tvl`, `volume_24h`, `fee_24h`, all-time totals, `total_pools`). No params. Use for macro/health context.
 
-### 3. Select Liquidity Shape
+### Endpoints that DO NOT EXIST — never call these
+`/wallets/{wallet}/open_positions`, `/wallets/{wallet}/closed_positions`, and
+`/positions/{address}/total_claim_fees` are **not real endpoints** (a bare position address in the `pnl` path
+also fails). Use `/portfolio/open`, `/portfolio`, and `allTimeFees` / `/total_claims` respectively.
 
-Match shape to market thesis:
+### Field-name gotchas
+On the pool object, `volume`, `fees`, `fee_tvl_ratio`, and `protocol_fees` are **`TimeWindowData` objects** keyed
+by `30m`/`1h`/`2h`/`4h`/`12h`/`24h`. Read `volume["24h"]`, `fees["24h"]`, `fee_tvl_ratio["24h"]` — there are **no**
+scalar `trade_volume_24h`, `fees_24h`, or scalar `fee_tvl_ratio` fields. `apr`/`apy` are 24h scalars; `farm_apr`/
+`farm_apy` exist when `has_farm`. Always name the window when quoting a ratio (e.g. `fee_tvl_ratio["24h"] = 0.8%`);
+the `/pools/groups` endpoint instead returns `max_fee_tvl_ratio` (the MAX across the chosen window).
 
-- "I think price will stay roughly here" → **Curve** (maximize efficiency at current price)
-- "I don't have a strong directional view" → **Spot** (balanced exposure)
-- "I expect big swings / want to DCA" → **Bid-Ask** (capture volatility at edges)
-- "I want to gradually sell my token" → **Bid-Ask, single-sided** (DCA out)
-- "I want to gradually buy a token at lower prices" → **Bid-Ask, single-sided** (DCA in)
+### Data-driven rebalance signal
+Do not eyeball it. Pull `/portfolio/open` → read `positionsOutOfRange[]` / `outOfRange`, or pull
+`/positions/{pool}/pnl` → compare **`poolActiveBinId`** against each position's **`[lowerBinId, upperBinId]`** and
+read `isOutOfRange`. `feePerTvl24h` tells you whether the position is actually earning right now.
 
-### 4. Set the Price Range
+---
 
-- Wider range = stay in range longer, but lower capital efficiency
-- Narrower range = higher fees while in range, but more rebalancing needed
-- For volatile pairs, err wider. For stable pairs, go tight.
-- Rule of thumb: look at the pair's 7-day price range and set your position to cover at least that, plus a buffer
+# ANSWERING COMMON QUESTIONS
 
-### 5. Plan for Rebalancing
+**"What APR can I expect?"** Never promise one. Fetch the pool and quote real `apr`, `fee_tvl_ratio["24h"]`, and
+`farm_apr` — then state it **net of the 10% / 20% protocol cut** and note the fee upside is capped at 10% total.
+APR follows volume through *your* bins, which can dry up.
 
-Be explicit about rebalancing expectations:
+**"Should I rebalance now?"** Now answerable from data: pull `/portfolio/open` (`positionsOutOfRange[]`, `outOfRange`)
+or `/positions/{pool}/pnl` (`isOutOfRange`, `poolActiveBinId` vs `[lowerBinId, upperBinId]`). If in range and centered,
+usually hold. If at the edge or out, weigh **resize-in-place** (widen/re-center without closing) against close-and-reopen,
+and factor whether you expect price to return before locking in IL.
 
-- **Spot on stable pairs:** Can go days/weeks without rebalancing
-- **Curve on volatile pairs:** May need daily rebalancing if price trends
-- **Bid-Ask:** Monitor for when price reaches your edges; that's when you're earning the most but also approaching the end of your range
-- **When to rebalance:** When the active bin has moved significantly away from the center of your position, or when price has left your range entirely
-- **Cost of rebalancing:** Each rebalance involves a transaction (gas fees on Solana are low, but frequent rebalancing can also lock in IL if price oscillates)
+**"Spot, Curve, or Bid-Ask?"** Default to **Spot** for most LPs — most forgiving, least management. **Curve** only for
+high-conviction tight ranges (stable/pegged). **Bid-Ask** when they understand the DCA/volatility-capture dynamic.
 
-### 6. Risk Warnings
+**"How do I minimize IL?"** Pick pairs you are happy holding either side of; use wider ranges (trade efficiency for
+resilience); LP where `fee_tvl_ratio["24h"]` is high (more fees to offset IL); consider single-sided if you only want
+one-token exposure. Dynamic fees offset IL, never remove it.
 
-Always mention relevant risks:
+**"Which token will I earn fees in?"** Set by the pool's **Collect Fee Mode** — `collect_fee_mode` 0 (**InputOnly**,
+fees in whichever token enters the swap) vs 1 (**OnlyY**, always token Y). Read it from the pool object; the LP cannot change it.
 
-- Concentrated liquidity means amplified IL compared to traditional AMMs
-- DLMM is NOT connected to Meteora's Dynamic Vaults (no lending yield — all liquidity is used purely for trading)
-- New token launches carry the highest IL risk alongside the highest fee potential
-- Smart contract risk exists with any DeFi protocol
-- Past fee APR does not guarantee future returns — fee earnings depend on volume, and volume can dry up
+**"Are there farm rewards?"** Only if the pool's function mode is **liquidity mining** (mutually exclusive with limit
+orders). Check `has_farm` and `farm_apr`/`farm_apy`; limit-order-mode pools have no farm APR.
 
-## DLMM Launch Pools
+---
 
-Launch Pools are DLMM pools with additional features for new token launches:
+# USE-CASE PLAYBOOKS
 
-- **Single-sided deposits:** Projects can bootstrap liquidity with only their token (no need for upfront SOL/USDC matching)
-- **Activation point:** Pool creator sets a specific time (slot or timestamp) when trading begins
-- **Dynamic fees enabled by default:** Fees start high at launch (when sniper bot activity and volatility are highest) and decrease as the market stabilizes
-- **Alpha Vault integration:** Anti-bot mechanism that lets genuine community members reserve first buys before the pool activates
+For a concrete setup + management + exit recipe for a specific goal (stable-pair yield, blue-chip LP, memecoin launch,
+DCA-in/out, take-profit limit orders), read **`references/use-case-playbooks.md`**.
 
-**LP strategy for launch pools:**
-- Extremely high fee potential in the first hours/days, but also extreme IL risk
-- Consider using wider bin steps (100+ bps) to stay in range through the initial price discovery
-- Bid-Ask or Spot shapes tend to work better than Curve for launches (Curve is too concentrated for the wild price swings)
-- Be prepared that the token could drop 80%+ from launch price — only LP with capital you're comfortable losing
-- Dynamic fees during the initial volatility spike can generate substantial returns that offset IL, but this is not guaranteed
+---
 
-## Answering Common Questions
+# REFERENCE DOCUMENTATION
 
-**"What APR can I expect?"**
-Never give a specific APR promise. Instead, explain that APR depends on: trading volume through your specific bins, the fee tier (bin step + base factor), market volatility (dynamic fee component), and whether price stays in your range. Point them to Meteora's UI which shows historical fee data for existing pools.
+Official Meteora docs:
+- Docs root: https://docs.meteora.ag
+- LLM index: https://docs.meteora.ag/llms.txt
+- DLMM Data API Overview: https://docs.meteora.ag/developer-guides/dlmm/api-reference/overview (individual endpoints under `https://docs.meteora.ag/api-reference/dlmm/<group>/<page>`)
+- DLMM TypeScript SDK Reference: https://docs.meteora.ag/developer-guides/dlmm/typescript-sdk/reference (with `getting-started` and `examples` siblings)
 
-**"Should I rebalance now?"**
-Ask: Is the active bin still within your position? If yes, and it's reasonably centered, probably not. If the active bin is at the edge of your range or has left it entirely, yes — rebalance or withdraw and reposition. Factor in whether you expect price to come back (in which case waiting might be better than locking in IL by rebalancing).
-
-**"Spot, Curve, or Bid-Ask?"**
-Default recommendation is Spot for most LPs, especially those new to DLMM. It's the most forgiving and requires the least active management. Only recommend Curve if they have high conviction on a tight range, and Bid-Ask if they understand the DCA dynamic or are targeting volatility capture.
-
-**"How do I minimize impermanent loss?"**
-- Choose pairs where you're happy holding both tokens regardless
-- Use wider ranges (accept lower efficiency for more resilience)
-- LP on pairs with high volume-to-TVL ratio (more fees to offset IL)
-- Consider single-sided positions if you only want exposure to one token
-- Dynamic fees help during volatile periods, but they can't eliminate IL — only offset it
-
-## DLMM Data API — Use It Actively
-
-Meteora provides a public REST API that returns live pool, position, and portfolio data. **You should actively fetch from this API whenever possible** to ground your advice in real numbers instead of hypotheticals. If the user gives you a token mint, pool address, or wallet address, hit the API and pull the data before advising.
-
-**Base URL:** `https://dlmm.datapi.meteora.ag`
-**Swagger UI:** `https://dlmm.datapi.meteora.ag/swagger-ui/`
-**Rate limit:** 30 requests per second
-
-### When to Fetch
-
-- **User mentions a token pair** (e.g., "SOL/USDC", "BONK/SOL") → Fetch `/pools/groups` or `/pools?query=<token>` to find available pools, compare bin steps, volume, fees, APR
-- **User gives a pool address** → Fetch `/pools/{address}` for current stats, then `/pools/{address}/ohlcv` for recent price action and `/pools/{address}/volume/history` for volume trends
-- **User gives a wallet address** → Fetch `/wallets/{wallet}/open_positions` to see their active positions, `/portfolio/total` for overall P&L
-- **User gives a position address** → Fetch `/positions/{address}/pnl` for P&L, `/positions/{address}/total_claim_fees` for accrued fees
-- **User asks "what pool should I use?"** → Fetch `/pools/groups` to compare all pools for that pair and recommend based on real fee_tvl_ratio, volume, and APR data
-- **User asks about protocol health** → Fetch `/stats/protocol_metrics` for aggregate TVL, volume, and fee data
-
-The API is public and requires no authentication. Use WebFetch, curl, or any HTTP tool available to you. Build URLs like: `https://dlmm.datapi.meteora.ag/pools?query=SOL`
-
-### Complete Endpoint Reference
-
-**Pool Discovery & Details:**
-- `GET /pools` — Paginated pool listing. Params: `page`, `page_size`, `query`, `filter_by`, `sort_by`. Returns pool address, name, mints, bin_step, fees, volume, TVL, APR/APY, reserves, tags
-- `GET /pools/groups` — Pools grouped by token pair. Params: `page`, `page_size`, `query`, `filter_by`, `sort_by`, `volume_tw`, `fee_tvl_ratio_tw`
-- `GET /pools/groups/{lexical_order_mints}` — Pools for a specific token pair group. Params: `page`, `page_size`, `query`, `filter_by`, `sort_by`
-- `GET /pools/{address}` — Detailed info for a specific pool
-
-**Pool Analytics:**
-- `GET /pools/{address}/ohlcv` — OHLCV candlestick data. Params: `timeframe`, `start_time`, `end_time`
-- `GET /pools/{address}/volume/history` — Volume history over time. Params: `timeframe`, `start_time`, `end_time`
-
-**Positions:**
-- `GET /positions/{address}/historical` — Historical events for a position. Params: `event_type`, `order_direction`
-- `GET /positions/{address}/total_claim_fees` — Total claimed fees for a position
-- `GET /positions/{address}/pnl` — Position profit/loss data. Params: `user`, `status`, `page`, `page_size`
-
-**Wallet:**
-- `GET /wallets/{wallet}/open_positions` — All open positions for a wallet. Params: `pool` (optional filter)
-- `GET /wallets/{wallet}/closed_positions` — Closed positions with cursor pagination. Params: `start_time`, `end_time`, `limit`, `next_cursor`, `pool`
-
-**Portfolio:**
-- `GET /portfolio` — Portfolio overview. Params: `user`, `page`, `page_size`, `days_back`
-- `GET /portfolio/open` — Open portfolio positions. Params: `user`, `page`, `page_size`, `sort_direction`, `sort_by`
-- `GET /portfolio/total` — Portfolio totals. Params: `user`
-
-**Protocol Stats:**
-- `GET /stats/protocol_metrics` — Protocol-wide aggregate metrics (TotalTVL, Volume24h, Fee24h)
-
-### How to Use API Data in Your Advice
-
-**Before entering a position — fetch and compare:**
-- Pull `/pools/groups` for the token pair. Compare all available pools by: trade_volume_24h, fees_24h, fee_tvl_ratio, current APR, and bin_step
-- The pool with the best fee_tvl_ratio at a bin_step that matches the pair's volatility is usually the right pick
-- Show the user the actual numbers: "Pool X has $2.4M daily volume, 0.8% fee/TVL ratio, and 45% APR at 25 bps bin step. Pool Y has only $400K volume at 100 bps. Pool X looks better for your needs."
-
-**While in a position — fetch before advising:**
-- Pull `/positions/{address}/pnl` and `/positions/{address}/total_claim_fees` to see actual P&L and unclaimed fees
-- Pull `/pools/{address}/ohlcv` to check recent price behavior before recommending rebalance or hold
-- Show real numbers: "Your position has $142 in unclaimed fees and is currently -$85 IL, so you're net positive. Volume has been steady — I'd hold."
-
-**Evaluating a pool — key fields to highlight:**
-- `trade_volume_24h` — Is there enough volume to generate meaningful fees?
-- `fee_tvl_ratio` — How efficiently is TVL being utilized? Higher = better for LPs
-- `fees_24h` — Absolute fee generation
-- `farm_apr` / `farm_apy` — Are there additional LM rewards?
-- `bin_step` — Does the bin step match the pair's volatility profile?
-
-**Tracking performance over time:**
-- Pull `/portfolio/total` for a wallet-wide P&L snapshot
-- Pull `/wallets/{wallet}/closed_positions` to review historical performance
-- Pull `/pools/{address}/volume/history` to spot volume trends (rising = good for LPs, falling = consider exiting)
-
-## Reference Documentation
-
-For detailed technical documentation, API references, and SDK guides:
-- Meteora Documentation: https://docs.meteora.ag
-- Documentation Index (for LLM consumption): https://docs.meteora.ag/llms.txt
-- DLMM API Reference: https://docs.meteora.ag/api-reference/dlmm/overview
-- DLMM TypeScript SDK Functions: https://docs.meteora.ag/developer-guide/guides/dlmm/typescript-sdk/sdk-functions
-
-When a user needs specific API or SDK information, suggest they check these resources directly or, if web access is available, fetch the relevant page to provide exact details.
+When a user needs exact API or SDK detail beyond the recipes here, fetch the relevant page directly or point them to it.

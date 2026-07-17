@@ -14,16 +14,21 @@ This skill turns Claude into a Meteora DLMM strategist. It provides guidance on:
 - **Token launch LP strategies** — navigating DLMM Launch Pools with high volatility
 - **Single-sided liquidity & DCA** — using DLMM for dollar-cost averaging in/out of positions
 - **Live data** — fetches real-time pool data from the Meteora DLMM Data API to ground advice in actual numbers
+- **Native limit orders** — on-chain bid/ask orders (limit-order-mode pools), fills, and fee sharing
+- **Dynamic position resizing** — widening/shrinking live positions in place instead of close-and-reopen
+- **Fee economics** — exact base/variable-fee math, the 10% total-fee cap, protocol fee split, composition fee, and Collect Fee Mode
+- **Use-case playbooks** — concrete setup/management/exit recipes in `references/use-case-playbooks.md`
 
 ## Installation
 
 ### As a Claude Code Skill
 
-Copy the `SKILL.md` file into your Claude Code skills directory:
+Copy `SKILL.md` and the `references/` directory into your Claude Code skills directory:
 
 ```bash
 mkdir -p ~/.claude/skills/meteora-dlmm-lp
 cp SKILL.md ~/.claude/skills/meteora-dlmm-lp/
+cp -r references ~/.claude/skills/meteora-dlmm-lp/
 ```
 
 ### As a Cowork Plugin Skill
