@@ -53,6 +53,32 @@
         "Presents actual data points (volume, fees, TVL, APR) from the API response",
         "Makes a recommendation grounded in the fetched data, not just general advice"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "I heard Meteora DLMM has real on-chain limit orders now. I want to ladder out of my WIF position between $2.20 and $2.60 without babysitting charts. How do limit orders on DLMM actually work, what are the constraints, and do I earn or pay fees while my order sits there?",
+      "expected_output": "Explains DLMM native limit orders: an ask order places the sell token at/above the active bin and fills bin-by-bin as price rises. Mentions the 50-bins-per-order cap, that limit orders only work on pools whose function mode supports them (mutually exclusive with liquidity mining), and that order participants receive a share (50%) of the limit-order fee portion when swaps fill their order.",
+      "files": [],
+      "expectations": [
+        "Describes native on-chain limit orders as a real DLMM feature, distinct from the 'each bin is like a limit order' analogy",
+        "Explains an ask/sell order places the base token at or above the active price and converts as price rises through the bins",
+        "Mentions the 50 bins per order maximum",
+        "States limit orders are only available on pools whose function mode supports them (mutually exclusive with liquidity mining pools)",
+        "Mentions that filled limit-order liquidity earns a fee share (50% of the limit-order fee portion)"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "My SOL/USDC DLMM position on Meteora keeps drifting to the edge of its range and I'm tired of closing and reopening it every time price moves. Is there a cheaper or smarter way to manage this now? What does a rebalance actually cost me?",
+      "expected_output": "Explains in-place resizing of Dynamic Positions: widen/shrink a live position without closing (claim+remove+resize+add in one flow), with the 91-added-bins-per-resize-instruction cap and shrink modes. Costs: low Solana gas plus non-refundable SOL rent for new bin arrays, refundable position rent, and a possible composition fee when adding off-ratio into the active bin. Warns rebalancing can lock in IL.",
+      "files": [],
+      "expectations": [
+        "Explains that Dynamic Positions can be resized in place without closing and reopening the position",
+        "Mentions the combined rebalance flow (claim, remove, resize, add liquidity in one position-management flow) or the 91-bins-per-resize-instruction cap or shrink modes",
+        "Explains rebalance cost beyond gas: non-refundable SOL rent for creating new bin arrays (position rent refundable on close)",
+        "Mentions the composition fee risk when adding off-ratio liquidity into the active bin",
+        "Notes that rebalancing can lock in impermanent loss and weighs waiting vs acting"
+      ]
     }
   ]
 }
