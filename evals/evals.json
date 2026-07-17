@@ -4,80 +4,86 @@
     {
       "id": 1,
       "prompt": "I want to LP on a new memecoin/SOL pair on Meteora DLMM. The token just launched 2 hours ago and is super volatile. What bin step should I use, what liquidity shape, and how wide should I set my range?",
-      "expected_output": "Recommends a high bin step (80-200+ bps), suggests Spot or Bid-Ask over Curve, recommends a wide range, warns about extreme IL risk for new launches, mentions dynamic fees as an offset, and advises only risking capital the LP can afford to lose.",
+      "expected_output": "Recommends a high bin step within the program's 400 bps cap, Spot or Bid-Ask over Curve, a wide range, frames fees net of the 20% launch-pool protocol cut and the 10% total-fee cap, warns about bin-array rent on rebalances and extreme IL, and grounds or offers to ground the advice in live pool data.",
       "files": [],
       "expectations": [
-        "Recommends a bin step of 80 bps or higher for a volatile memecoin launch",
+        "Recommends a bin step of 80 bps or higher and names the 400 bps program maximum for bin steps",
         "Recommends Spot or Bid-Ask shape (not Curve) for a volatile new launch",
-        "Recommends a wide price range to avoid going out of range quickly",
-        "Warns about impermanent loss risk being extreme for new token launches",
-        "Mentions dynamic fees as a mechanism that helps offset IL during volatile periods",
-        "Includes a risk warning about potential for significant capital loss"
+        "Frames expected fee earnings net of the launch-pool protocol cut (protocol takes 20% on Launch Pools / LP keeps 80%)",
+        "Mentions the 10% total swap-fee cap (MAX_FEE_RATE) when discussing high launch fees",
+        "Warns that rebalancing into new price territory costs non-refundable SOL rent for bin arrays, not just cheap gas",
+        "Grounds advice in live data: quotes real fetched pool numbers, or explicitly requests the pool/mint address and names the live API comparison it would run",
+        "Includes a risk warning that a launch token can collapse (e.g. 80%+) and only disposable capital should be used"
       ]
     },
     {
       "id": 2,
       "prompt": "I have a SOL/USDC DLMM position on Meteora with a Curve shape, 20 bps bin step, and the active bin is now at the very edge of my range. Price has been trending up. Should I rebalance now or wait? What should I consider?",
-      "expected_output": "Discusses the tradeoffs of rebalancing vs waiting. Explains that at the edge of a Curve position most liquidity is behind them (center-weighted). Considers whether the LP expects price to continue trending or revert. Mentions that rebalancing locks in IL. Suggests practical options.",
+      "expected_output": "Explains Curve's thin edge liquidity, weighs rebalancing (locks in IL) vs waiting, offers in-place resizing as an alternative to close-and-reopen, warns about the composition fee at the active bin, verifies range status from live data, and considers trend vs mean-reversion.",
       "files": [],
       "expectations": [
         "Explains that a Curve shape concentrates liquidity at the center so the LP has very little active liquidity at the range edges",
-        "Discusses the tradeoff between rebalancing (locks in IL) vs waiting (might go out of range)",
-        "Asks or considers whether the LP expects continued uptrend or mean reversion",
-        "Provides at least two concrete options or courses of action",
-        "Mentions that being out of range means earning zero fees"
+        "Discusses the tradeoff between rebalancing (locks in IL) vs waiting (might go out of range / earn nothing)",
+        "Mentions in-place position resizing or widening (Dynamic Positions) as an alternative to closing and reopening",
+        "Warns about the composition fee when adding off-ratio liquidity into the active bin during a re-center",
+        "Uses live data: quotes fetched pool/price numbers, or gives the exact API call (e.g. /positions/{pool_address}/pnl?user=) to verify the position's range status",
+        "Considers whether the LP expects continued uptrend or mean reversion before acting"
       ]
     },
     {
       "id": 3,
       "prompt": "I'm sitting on a bag of tokens I want to gradually sell over the next few weeks. Can I use Meteora DLMM to do a DCA sell? How would I set that up - which shape, bin step, and range?",
-      "expected_output": "Confirms DLMM can be used for DCA selling via single-sided liquidity. Recommends Bid-Ask shape for DCA. Explains how to set up single-sided with only the sell token. Discusses bin step and range selection for gradual selling. Explains the mechanics of how bins convert tokens as price moves through them.",
+      "expected_output": "Sets up a single-sided base-token DCA-out above current price with Bid-Ask, warns about retrace re-conversion and the composition fee at the active bin, offers native ask limit orders as the sell-and-stay-sold alternative, and covers fee economics (protocol cut / Collect Fee Mode).",
       "files": [],
       "expectations": [
-        "Confirms that DLMM supports single-sided liquidity provision for DCA strategies",
-        "Recommends Bid-Ask shape for the DCA sell strategy",
-        "Explains that the LP should deposit only the token they want to sell",
-        "Explains the mechanics: as price moves through bins, tokens get converted/sold",
-        "Provides guidance on setting the price range above current price for a sell DCA"
+        "Explains the setup: deposit ONLY the token being sold, single-sided, in a range ABOVE the current/active price",
+        "Recommends Bid-Ask as the primary DCA-out shape (Spot ladder acceptable as an alternative)",
+        "Warns that filled bins re-convert on a price retrace, so the LP must withdraw/harvest filled bins to lock in sells",
+        "Mentions native DLMM ask limit orders as an alternative that stays sold (available only on limit-order-mode pools)",
+        "Warns about the composition fee if the deposit touches the active bin, or advises starting at least 1 bin above it",
+        "Addresses fee economics: fees earned are net of the protocol cut, and/or Collect Fee Mode determines which token fees accrue in"
       ]
     },
     {
       "id": 4,
       "prompt": "What are the best SOL/USDC DLMM pools on Meteora right now? I want to find the one with the highest fees relative to TVL. Can you look it up?",
-      "expected_output": "Fetches live data from the Meteora DLMM Data API (dlmm.datapi.meteora.ag) to find SOL/USDC pools, compares them by fee_tvl_ratio, volume, APR, and bin_step, and makes a recommendation based on the real data.",
+      "expected_output": "Fetches live data from dlmm.datapi.meteora.ag using real endpoints, compares pools by windowed fee_tvl_ratio, checks stability beyond the trailing 24h window, and recommends specific pool addresses grounded in the fetched numbers.",
       "files": [],
       "expectations": [
-        "Attempts to fetch data from dlmm.datapi.meteora.ag API",
-        "Looks for SOL/USDC pools specifically using the API",
-        "Compares pools by fee_tvl_ratio or similar fee efficiency metric",
-        "Presents actual data points (volume, fees, TVL, APR) from the API response",
-        "Makes a recommendation grounded in the fetched data, not just general advice"
+        "Fetches live data from the Meteora DLMM Data API and presents real figures (specific pool addresses, volume, TVL, fee/TVL values)",
+        "Quotes fee/TVL with its time window named (e.g. fee_tvl_ratio[\"24h\"] or '24h fee/TVL'), not as an unqualified scalar",
+        "Looks beyond the trailing 24h window (intraday windows or multi-day volume/fee history) before recommending, to catch burst artifacts",
+        "Every API endpoint referenced in the response actually exists on the live API (no /pools/groups, /wallets/{wallet}/open_positions, or other non-existent endpoints)",
+        "Makes a concrete recommendation naming at least one pool address, grounded in the fetched data"
       ]
     },
     {
       "id": 5,
       "prompt": "I heard Meteora DLMM has real on-chain limit orders now. I want to ladder out of my WIF position between $2.20 and $2.60 without babysitting charts. How do limit orders on DLMM actually work, what are the constraints, and do I earn or pay fees while my order sits there?",
-      "expected_output": "Explains DLMM native limit orders: an ask order places the sell token at/above the active bin and fills bin-by-bin as price rises. Mentions the 50-bins-per-order cap, that limit orders only work on pools whose function mode supports them (mutually exclusive with liquidity mining), and that order participants receive a share (50%) of the limit-order fee portion when swaps fill their order.",
+      "expected_output": "Explains native ask limit orders (base token at/above active bin, bin-by-bin fills, 50-bin cap, limit-order-mode pools only, 50% fee share), sanity-checks the requested band against live WIF spot, and covers monitoring/lifecycle.",
       "files": [],
       "expectations": [
         "Describes native on-chain limit orders as a real DLMM feature, distinct from the 'each bin is like a limit order' analogy",
-        "Explains an ask/sell order places the base token at or above the active price and converts as price rises through the bins",
+        "Explains an ask/sell order places the base token at or above the active price and fills bin-by-bin as price rises",
         "Mentions the 50 bins per order maximum",
         "States limit orders are only available on pools whose function mode supports them (mutually exclusive with liquidity mining pools)",
-        "Mentions that filled limit-order liquidity earns a fee share (50% of the limit-order fee portion)"
+        "States that filled limit-order liquidity earns a fee share (50% of the limit-order fee portion)",
+        "Sanity-checks the requested price band against live data and flags that $2.20-$2.60 is far above WIF's current spot price",
+        "Covers monitoring or lifecycle specifics: the /wallets/{wallet}/limit_orders/... endpoints, or the cancel-then-close order lifecycle"
       ]
     },
     {
       "id": 6,
       "prompt": "My SOL/USDC DLMM position on Meteora keeps drifting to the edge of its range and I'm tired of closing and reopening it every time price moves. Is there a cheaper or smarter way to manage this now? What does a rebalance actually cost me?",
-      "expected_output": "Explains in-place resizing of Dynamic Positions: widen/shrink a live position without closing (claim+remove+resize+add in one flow), with the 91-added-bins-per-resize-instruction cap and shrink modes. Costs: low Solana gas plus non-refundable SOL rent for new bin arrays, refundable position rent, and a possible composition fee when adding off-ratio into the active bin. Warns rebalancing can lock in IL.",
+      "expected_output": "Explains in-place resizing of Dynamic Positions with the combined rebalance flow, itemizes true costs (non-refundable bin-array rent vs refundable position rent, composition fee, crystallized IL), and diagnoses the root cause from live pool data.",
       "files": [],
       "expectations": [
         "Explains that Dynamic Positions can be resized in place without closing and reopening the position",
         "Mentions the combined rebalance flow (claim, remove, resize, add liquidity in one position-management flow) or the 91-bins-per-resize-instruction cap or shrink modes",
         "Explains rebalance cost beyond gas: non-refundable SOL rent for creating new bin arrays (position rent refundable on close)",
         "Mentions the composition fee risk when adding off-ratio liquidity into the active bin",
-        "Notes that rebalancing can lock in impermanent loss and weighs waiting vs acting"
+        "Notes that rebalancing can lock in impermanent loss and weighs waiting vs acting",
+        "Grounds the diagnosis in live data: quotes fetched pool numbers (range coverage, fee/TVL) or offers the /portfolio/open or /positions/{pool}/pnl call for the user's wallet"
       ]
     }
   ]
