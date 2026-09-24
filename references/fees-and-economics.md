@@ -30,7 +30,7 @@ base_fee_rate = base_factor × bin_step × 10 × 10^base_fee_power_factor    # s
 
 The **× 10** constant is load-bearing. A common mis-statement (`bin_step × base_factor × 10^base_fee_power_factor`) drops the × 10, making every base-fee estimate **10× too low** — never reproduce it. Divide the result by 1e9 to get the fractional rate.
 
-The base fee is the *minimum* fee any swap in the pool pays; it is set by the creator via the pool's `StaticParameters` and can only be chosen from an allowed preset (`PresetParameter2`), so creators cannot pick arbitrary values. Because bin_step is a direct multiplier, larger-bin-step pools carry higher base fees — which fits their purpose (each bin is a bigger price move, so LPs need more per-trade compensation). The creator's tradeoff, worth surfacing when advising on pool choice or creation: a **lower base fee may attract more volume**, while a **higher base fee earns more per unit of volume**. There is no single right answer; it depends on the pair's expected flow.
+The base fee is the *minimum* fee any swap in the pool pays; it is set at creation in the pool's `StaticParameters` (standard permissionless pools pick from an allowed preset, `PresetParameter2`). It is **not** fixed for life: the program bounds it to **`MIN_BASE_FEE` = 100,000 (0.01%)** through **`MAX_BASE_FEE` = 100,000,000 (10%)** at 1e9 precision, and a pool operator can change it after creation with the `update_base_fee_parameters` instruction. So read the current on-chain parameters rather than assuming the creation-time value. Because bin_step is a direct multiplier, larger-bin-step pools carry higher base fees — which fits their purpose (each bin is a bigger price move, so LPs need more per-trade compensation). The creator's tradeoff, worth surfacing when advising on pool choice or creation: a **lower base fee may attract more volume**, while a **higher base fee earns more per unit of volume**. There is no single right answer; it depends on the pair's expected flow.
 
 Worked arithmetic to internalize the × 10 (plug the pool's real `StaticParameters` — the inputs below are illustrative only). With `base_factor = 5,000`, `bin_step = 25`, `base_fee_power_factor = 0`: correct = `5,000 × 25 × 10 × 10^0 = 1,250,000` stored → `1,250,000 / 1e9 = 0.125%`. The mis-stated formula (missing × 10) gives `5,000 × 25 × 10^0 = 125,000` → `0.0125%` — exactly 10× too low. Any time your base-fee estimate looks suspiciously tiny, check that the × 10 is present.
 
@@ -177,6 +177,7 @@ Every dollar figure in that chain must come from a digest-backed API field or th
 | `FEE_DENOMINATOR` (fee precision) | 1,000,000,000 (1e9) |
 | 1% fee rate, stored | 10,000,000 |
 | `MAX_FEE_RATE` (total fee cap) | 100,000,000 = 10% |
+| `MIN_BASE_FEE` / `MAX_BASE_FEE` | 100,000 (0.01%) / 100,000,000 (10%) |
 | Variable-fee denominator | 100,000,000,000 (1e11) |
 | bps for 100% | 10,000 |
 | Standard `protocol_share` (typical; per-pool — read on-chain) | 1,000 bps = 10% (LP keeps 90%) |

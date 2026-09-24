@@ -172,7 +172,7 @@ Two components determine what a swap pays:
 - **Base Fee** = **base_factor × bin_step × 10 × 10^base_fee_power_factor** (result stored in **1e9
   precision**). The **× 10** scale factor is easy to drop by accident; without it every
   base-fee estimate comes out **10× too low**. Base fee is the pool's minimum swap fee,
-  set at creation; higher bin step ⇒ higher base fee.
+  set at creation but not immutable (bounded 0.01%–10%; an operator can change it later); higher bin step ⇒ higher base fee.
 - **Variable Fee** scales with **(volatility_accumulator × bin_step)²** — the square means high-bin-step pools
   escalate fees far faster under volatility. It rises as swaps cross bins and decays over `filter_period` /
   `decay_period` when activity cools ("surge pricing"). Some pools set variable-fee control to 0 (no variable fee).
