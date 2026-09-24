@@ -127,7 +127,7 @@ Range mechanics:
   min/max bin IDs, up to the program constant `POSITION_MAX_LENGTH` = **1,400 bins** per position. Growth past the
   default 70 bins is capped at **91 added bins per `increase_position_length` instruction**, so wide ranges need several.
 - The real hard cap that constrains you is the **bin step: 400 bps program maximum**.
-- Range math on a centered 70-bin layout: ≈ **±8.5% at 25 bps**, ≈ **±35% at 100 bps**. Wider bin step ⇒
+- Range math on a centered 70-bin layout (geometric, so asymmetric): **+9.1% / −8.4% at 25 bps**, **+41.7% / −29.4% at 100 bps**. Wider bin step ⇒
   same bin count covers far more price.
 
 ### Bin-step selection
