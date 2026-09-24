@@ -34,7 +34,7 @@ Each `PositionV2` stores:
 
 A position starts with the **default 70-bin layout** (70 inline liquidity shares, fee checkpoints,
 and reward checkpoints). Ranges wider than 70 bins append extra per-bin data (`PositionBinData`)
-after that header, up to a **maximum of 1,400 bins**. Note that a bin **array** is also 70 bins —
+after that header, up to a **maximum of 1,400 bins** (the program constant `POSITION_MAX_LENGTH`). Note that a bin **array** is also 70 bins —
 `MAX_BIN_PER_ARRAY = 70` — so the default position exactly fills one array's worth of bins. (The
 commonly cited "69" is the UI's *default range width*, not the account's bin capacity; the account
 number is 70.)

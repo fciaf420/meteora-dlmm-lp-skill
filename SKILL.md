@@ -124,8 +124,8 @@ Range mechanics:
 - The **program default position layout is 70 bins**, not 69 (a bin array is 70 bins; the Dynamic Terminal's
   add-liquidity slider centers ~69 bins on the active price, which is a UI detail, not the program default).
 - Positions extend via the dynamic **PositionV2** account (`increase_position_length`), bounded by the pool's
-  min/max bin IDs. The **1,400-bin figure is the maximum supported position length** (UI/terminal ceiling),
-  **not a hard per-transaction or program cap**.
+  min/max bin IDs, up to the program constant `POSITION_MAX_LENGTH` = **1,400 bins** per position. Growth past the
+  default 70 bins is capped at **91 added bins per `increase_position_length` instruction**, so wide ranges need several.
 - The real hard cap that constrains you is the **bin step: 400 bps program maximum**.
 - Range math on a centered 70-bin layout: ≈ **±8.5% at 25 bps**, ≈ **±35% at 100 bps**. Wider bin step ⇒
   same bin count covers far more price.
