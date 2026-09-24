@@ -53,9 +53,11 @@ Each bin of price movement adds `× 10,000` to the accumulator, and it is hard-c
 
 | Time since last update | Behavior |
 |---|---|
-| < `filter_period` | Keep existing `volatility_reference` (rapid trades stay "hot"). |
-| between `filter_period` and `decay_period` | `volatility_reference = volatility_accumulator × reduction_factor / 10,000` (partial decay). |
-| ≥ `decay_period` | `volatility_reference = 0` (fully cooled). |
+| < `filter_period` | Keep existing `volatility_reference` **and** `index_reference` (rapid trades stay "hot"). |
+| between `filter_period` and `decay_period` | `index_reference = active_id`; `volatility_reference = volatility_accumulator × reduction_factor / 10,000` (partial decay). |
+| ≥ `decay_period` | `index_reference = active_id`; `volatility_reference = 0` (fully cooled). |
+
+The `index_reference = active_id` reset is easy to miss but required to reproduce the accumulator: once `filter_period` has elapsed, the next swap measures bin movement from the bin that was active at that moment, not from the older reference.
 
 So when a user asks "why did fees spike then drop?": swaps crossing bins in quick succession pump the accumulator (fees rise), and once trading quiets past `decay_period` the reference resets to 0 (fees normalize). All three knobs — `filter_period`, `decay_period`, `reduction_factor` — live in the pool's `StaticParameters` and govern how fast the surge fades.
 
