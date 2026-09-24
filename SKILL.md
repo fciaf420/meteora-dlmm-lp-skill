@@ -69,8 +69,9 @@ and its **Collect Fee Mode** (InputOnly vs OnlyY — sets which token your fees 
 ### Step 2 — Pool selection from data
 A pair usually has several pools at different bin steps. Compare the variants on the numbers, not vibes:
 `volume["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, and `farm_apr` (if `has_farm`). The best pick is normally
-the highest `fee_tvl_ratio["24h"]` at a bin step that matches the pair's volatility — but read APR **net
-of the protocol cut** (10% standard / 20% launch), since the raw fee figure is pre-split. → `references/data-api.md`
+the highest `fee_tvl_ratio["24h"]` at a bin step that matches the pair's volatility. The API's `fees`,
+`fee_tvl_ratio`, and `apr` are **already net of the protocol cut** (it is reported separately in `protocol_fees`)
+— never deduct it again from API figures. → `references/data-api.md`
 
 ### Step 3 — Shape, range, and sidedness
 Pick a liquidity shape against the user's market thesis, a range wide enough to survive expected movement,
@@ -78,8 +79,9 @@ and decide one-sided vs two-sided. Narrower = more fees while in range but out-o
 lower fees per dollar but more durable. → concepts below, then `references/use-case-playbooks.md`
 
 ### Step 4 — Model NET yield
-Fee earnings are **not** the raw swap fee. Subtract the protocol cut (LP keeps **90%** standard / **80%**
-launch), remember the total swap fee is **hard-capped at 10%** (`MAX_FEE_RATE`) no matter how high
+Fee earnings are **not** the raw swap fee. Apply the LP share (typically **90%** standard / **80%** launch)
+**only to a gross `volume × fee_rate` figure you computed yourself** — API `fees` / `fee_tvl_ratio` / `apr` already
+exclude the protocol cut, so never haircut them again. Remember the total swap fee is **hard-capped at 10%** (`MAX_FEE_RATE`) no matter how high
 volatility drives it, and warn about the **composition fee** on off-ratio deposits into the active bin.
 → `references/fees-and-economics.md`
 
@@ -177,7 +179,8 @@ Two components determine what a swap pays:
 - **Hard cap:** total fee = `min(base + variable, MAX_FEE_RATE)`, and **`MAX_FEE_RATE` = 10%**. On-chain an LP
   never sees a total swap fee above 10%, however wild the volatility.
 - **Protocol takes its cut BEFORE LPs:** **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools (LP
-  keeps 80%)**. Always quote LP yield net of this — launch LPing is not pure upside.
+  keeps 80%)**. Always quote LP yield net of this — launch LPing is not pure upside. Data API fee/APR fields
+  are already net; apply the LP share only to gross `volume × fee_rate` you computed yourself.
 - **Composition fee warning:** adding an **off-ratio** deposit into the **active bin** (a token mix differing
   from the bin's current X:Y ratio) is charged a composition fee, because it acts like a forced mini-swap. No
   composition fee on empty or non-active bins. To avoid it, match the active bin's ratio or add outside the active bin.
@@ -296,7 +299,7 @@ read `isOutOfRange`. `feePerTvl24h` tells you whether the position is actually e
 # ANSWERING COMMON QUESTIONS
 
 **"What APR can I expect?"** Never promise one. Fetch the pool and quote real `apr`, `fee_tvl_ratio["24h"]`, and
-`farm_apr` — then state it **net of the 10% / 20% protocol cut** and note the fee upside is capped at 10% total.
+`farm_apr` — these are **already net of the protocol cut** (don't deduct it again) — and note the fee upside is capped at 10% total.
 APR follows volume through *your* bins, which can dry up.
 
 **"Should I rebalance now?"** Now answerable from data: pull `/portfolio/open` (`positionsOutOfRange[]`, `outOfRange`)

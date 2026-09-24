@@ -85,7 +85,7 @@ Fee amounts round **up** (ceil), favoring the pool. Form B's `(1e9 − total_fee
 
 ## Protocol and host split — model this or your net yield is wrong
 
-The protocol takes its cut **before LPs see anything**. This is the single most common omission in naive fee-APR math, so always net it out.
+The protocol takes its cut **before LPs see anything**. This is the single most common omission in naive fee-APR math, so always net it out — **but only once**. The Data API's `fees`, `fee_tvl_ratio`, and `apr` are **already LP-net** (`fees + protocol_fees = volume × total_fee_rate`; live check: `protocol_fees / (fees + protocol_fees)` ≈ 0.10 on standard pools). Apply the LP share only to a **gross** figure you computed yourself (`volume × fee_rate`, or `fees + protocol_fees`), never to API fee/APR fields.
 
 | Pool type | Protocol share | LP keeps |
 |---|---|---|
@@ -106,8 +106,10 @@ The launch-pool double-cut matters: launch LPing is often pitched as "extremely 
 **Net-yield formula the advisor should use:**
 
 ```
-LP_take = gross_swap_fee × LP_share          # LP_share = 0.90 standard, 0.80 launch
+LP_take = gross_swap_fee × LP_share          # LP_share = 1 − protocol_share/10,000 (typically 0.90 standard, 0.80 launch)
 ```
+
+`gross_swap_fee` here means a figure you built yourself from `volume × total_fee_rate`. If you started from Data API `fees` / `apr` / `fee_tvl_ratio`, you already have `LP_take` — multiplying again understates yield by 10% (standard) or 20% (launch).
 
 ## Composition fee — the off-ratio entry/rebalance trap
 
@@ -161,8 +163,8 @@ This is a distinct economic path from MM LPing — a limit-order participant kee
 
 Never quote an APR from memory. Compute it from API-sourced inputs, running them through this chain:
 
-1. **Gross fee** = pool fee income attributable to your bins over the window (from `fees["24h"]` scaled to your share of the active/crossed bins, or a position's `allTimeFees`).
-2. **− protocol cut** → multiply by LP share: `× 0.90` (standard) or `× 0.80` (launch).
+1. **LP fee** = pool LP fee income attributable to your bins over the window (`fees["24h"]` is already LP-net — scale it to your share of the active/crossed bins — or a position's `allTimeFees`).
+2. **Protocol cut: already excluded from API fields — do not deduct again.** Only when you started from a *gross* figure (`volume × total_fee_rate`, or `fees + protocol_fees`) multiply by the LP share, `1 − protocol_share/10,000` (typically `× 0.90` standard, `× 0.80` launch).
 3. **± LM reward** → add farm rewards for reward pools (`farm_apr`/`farm_apy`), but only for the fraction of time your liquidity sat in the active/paying bins.
 4. **vs IL** → subtract realized/unrealized IL (from position P&L). Net LP result = fees net of protocol + rewards − IL − any composition fee paid on entry − non-refundable bin-array rent on new ranges.
 

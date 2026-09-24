@@ -60,6 +60,8 @@ Recipe for "which pool for pair X?": call `/pools?filter_by=token_x=<mintA> %26%
 
 On the pool object, `volume`, `fees`, `fee_tvl_ratio`, and `protocol_fees` are **`TimeWindowData` objects keyed by `30m/1h/2h/4h/12h/24h`** — not scalars. Read `volume["24h"]`, `fee_tvl_ratio["24h"]`, `fees["24h"]`.
 
+**`fees` is the LP share, already net of the protocol cut** — `fees + protocol_fees = volume × fee rate`, so `fee_tvl_ratio` (= `fees / tvl`) and `apr` are net too. Never apply the 90%/80% LP share to these fields.
+
 There is **NO `trade_volume_24h` and NO `fees_24h` field** — those names do not exist. When you quote a fee/TVL ratio, always name its window, e.g. `fee_tvl_ratio["24h"] = 0.8%`, because the same object also carries `fee_tvl_ratio["1h"]` etc.
 
 `apr` and `apy` ARE scalars — both are 24-hour figures. `farm_apr`/`farm_apy` (LM rewards) exist and are scalars too.
@@ -113,7 +115,7 @@ Combine with pool-level `is_blacklisted`, `tags[]`, and `launchpad` before advis
 | `GET /pools/{address}/ohlcv` | `timeframe` (`5m 30m 1h 2h 4h 12h 24h`, default `24h`), `start_time`, `end_time` (unix seconds, inclusive) | `timestamp`, `timestamp_str`, `open`, `high`, `low`, `close`, `volume` |
 | `GET /pools/{address}/volume/history` | same params | `timestamp`, `timestamp_str`, `volume`, `fees`, `protocol_fees` |
 
-Range rules: both bounds given → `[start,end]`; one given → the other inferred from `timeframe`; neither → default range from `timeframe`. Use OHLCV to read realized price range/volatility before recommending range width or a rebalance; use volume/history to spot a trend (rising volume → healthier fee outlook; falling → consider exit). `protocol_fees` is broken out separately, so LP-realizable fee tracks `fees − protocol_fees`. For launch-spike detection, pull short windows (`5m`/`30m`/`1h`) — the launch fee/volume spike is invisible in the 24h number.
+Range rules: both bounds given → `[start,end]`; one given → the other inferred from `timeframe`; neither → default range from `timeframe`. Use OHLCV to read realized price range/volatility before recommending range width or a rebalance; use volume/history to spot a trend (rising volume → healthier fee outlook; falling → consider exit). `protocol_fees` is broken out separately and `fees` is already LP-net: LP-realizable fee = `fees`, gross = `fees + protocol_fees`. For launch-spike detection, pull short windows (`5m`/`30m`/`1h`) — the launch fee/volume spike is invisible in the 24h number.
 
 ## Position P&L — `GET /positions/{pool_address}/pnl`
 
