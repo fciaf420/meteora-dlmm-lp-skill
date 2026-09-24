@@ -22,7 +22,7 @@
       "expected_output": "Explains Curve's thin edge liquidity, weighs rebalancing (locks in IL) vs waiting, offers in-place resizing as an alternative to close-and-reopen, warns about the composition fee at the active bin, verifies range status from live data, and considers trend vs mean-reversion.",
       "files": [],
       "expectations": [
-        "Explains that a Curve shape concentrates liquidity at the center so the LP has very little active liquidity at the range edges",
+        "Explains that a Curve shape concentrates liquidity around the bin that was active at deposit (the center of a range centered at creation), tapering toward the edges, so the LP has very little active liquidity at the range edges",
         "Discusses the tradeoff between rebalancing (locks in IL) vs waiting (might go out of range / earn nothing)",
         "Mentions in-place position resizing or widening (Dynamic Positions) as an alternative to closing and reopening",
         "Warns about the composition fee when adding off-ratio liquidity into the active bin during a re-center",
