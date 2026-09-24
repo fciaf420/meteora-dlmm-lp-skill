@@ -150,9 +150,10 @@ Three base distributions, plus named UI presets built from them (choose against 
   - **Spot-Concentrated (1–3 bins)** — maximum concentration at a tight peg; **highest out-of-range risk**, needs close monitoring.
   - **Spot-Spread (20–30 bins)** — balances fee capture with breathing room; can still go out of range in a strong trend.
   - **Spot-Wide (~50 bins)** — durable coverage, rebalance less often; **lower fee capture per dollar** because liquidity is thin per bin.
-- **Curve** — concentrated near the center/active price. Highest efficiency when price holds; falls off at
-  the edges; most exposed to IL if price trends away. Best for stable/pegged pairs and high-conviction ranges.
-- **Bid-Ask** — inverse curve, liquidity heaviest at the edges. Captures volatility spikes and is the natural
+- **Curve** — peaks at the **active bin** at deposit time and tapers linearly toward both edges (SDK behavior; this
+  is the range middle only if the range is centered on the active bin). Highest efficiency when price holds;
+  most exposed to IL if price trends away. Best for stable/pegged pairs and high-conviction ranges.
+- **Bid-Ask** — Curve's mirror image: lightest at the active bin, rising linearly to the edges. Captures volatility spikes and is the natural
   shape for single-sided DCA. More advanced; may sit idle until price reaches an edge bin.
 
 The right shape is a market view: a narrow position earns more in range but goes inactive faster; a wide one

@@ -131,7 +131,7 @@ Two hard limits several playbooks lean on, worth memorizing: the total swap fee 
 
 - **When:** You expect price to swing hard and want to earn the most precisely on those swings out to the extremes, whether on a volatile pair or a wobbling pegged pair.
 - **Setup:**
-  - **Bid-Ask** shape — it concentrates liquidity at the *edges* of your range (the inverse of Curve), so the big fees land when price lurches out to a boundary bin.
+  - **Bid-Ask** shape — it concentrates liquidity at the *edges* of your range (Curve's mirror image: lightest at the active bin, heaviest at the edges), so the big fees land when price lurches out to a boundary bin.
   - Size the range around where you expect the swings to reach.
   - A larger bin step lets the variable fee escalate faster — the variable fee scales with the square of both volatility and bin step.
 - **Management:**
