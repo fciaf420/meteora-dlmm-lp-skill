@@ -178,8 +178,8 @@ Two components determine what a swap pays:
   `decay_period` when activity cools ("surge pricing"). Some pools set variable-fee control to 0 (no variable fee).
 - **Hard cap:** total fee = `min(base + variable, MAX_FEE_RATE)`, and **`MAX_FEE_RATE` = 10%**. On-chain an LP
   never sees a total swap fee above 10%, however wild the volatility.
-- **Protocol takes its cut BEFORE LPs:** **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools (LP
-  keeps 80%)**. Always quote LP yield net of this — launch LPing is not pure upside. Data API fee/APR fields
+- **Protocol takes its cut BEFORE LPs:** typically **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools
+  (LP keeps 80%)**, but it is per-pool — read `lbPair.parameters.protocolShare` on-chain for the exact value. Always quote LP yield net of this — launch LPing is not pure upside. Data API fee/APR fields
   are already net; apply the LP share only to gross `volume × fee_rate` you computed yourself.
 - **Composition fee warning:** adding an **off-ratio** deposit into the **active bin** (a token mix differing
   from the bin's current X:Y ratio) is charged a composition fee, because it acts like a forced mini-swap. No
@@ -223,7 +223,7 @@ Dynamic fees tip this toward you in volatile periods but never eliminate IL — 
 Pools built for token launches: single-sided seeding (bootstrap with only the project token), an **activation
 point** (slot or timestamp when trading begins), dynamic fees that start high during the initial sniper/volatility
 window and cool as the market settles, and optional **Alpha Vault** anti-bot pre-buys. Note: the **protocol
-cut DOUBLES to 20%** (LP keeps 80%), and the **total fee is still capped at 10%** — high early fees are real but
+cut typically DOUBLES to 20%** (LP keeps 80%), and the **total fee is still capped at 10%** — high early fees are real but
 bounded and taxed harder. Wider bin steps (100+ bps) and Spot/Bid-Ask survive price discovery better than Curve.
 Only deploy risk capital you can lose. → `references/launch-pools-and-terminal.md`
 
@@ -286,8 +286,8 @@ by `30m`/`1h`/`2h`/`4h`/`12h`/`24h`. Read `volume["24h"]`, `fees["24h"]`, `fee_t
 scalar `trade_volume_24h`, `fees_24h`, or scalar `fee_tvl_ratio` fields. `apr`/`apy` are 24h scalars; `farm_apr`/
 `farm_apy` exist when `has_farm`. Always name the window when quoting a ratio (e.g. `fee_tvl_ratio["24h"] = 0.8%`).
 Pool parameters (`bin_step`, `base_fee_pct`, `max_fee_pct`, `protocol_fee_pct`, `collect_fee_mode`) sit nested under
-`pool_config`, not at the top level. Note: live `pool_config.protocol_fee_pct` can differ from the documented standard
-(pools have been observed at 5%) — quote the live value, it is per-pool configuration.
+`pool_config`, not at the top level. Do **not** trust `pool_config.protocol_fee_pct` (it reports 5 on pools that are 10%
+on-chain), `max_fee_pct`, or `dynamic_fee_pct`. Read the protocol share on-chain → `references/fees-and-economics.md`.
 
 ### Data-driven rebalance signal
 Do not eyeball it. Pull `/portfolio/open` → read `positionsOutOfRange[]` / `outOfRange`, or pull

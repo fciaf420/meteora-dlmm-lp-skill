@@ -87,12 +87,12 @@ Fee amounts round **up** (ceil), favoring the pool. Form B's `(1e9 − total_fee
 
 The protocol takes its cut **before LPs see anything**. This is the single most common omission in naive fee-APR math, so always net it out — **but only once**. The Data API's `fees`, `fee_tvl_ratio`, and `apr` are **already LP-net** (`fees + protocol_fees = volume × total_fee_rate`; live check: `protocol_fees / (fees + protocol_fees)` ≈ 0.10 on standard pools). Apply the LP share only to a **gross** figure you computed yourself (`volume × fee_rate`, or `fees + protocol_fees`), never to API fee/APR fields.
 
-| Pool type | Protocol share | LP keeps |
+| Pool type | Typical protocol share | LP keeps |
 |---|---|---|
 | Standard DLMM pool | **10%** (`protocol_share` = 1,000 bps) | **90%** |
 | Launch Pool | **20%** (`ILM_PROTOCOL_SHARE` = 2,000 bps) | **80%** |
 
-`protocol_share` is capped at **2,500 bps (25%)** program-wide, but the configured values are the two above. The split:
+`protocol_share` is a **per-pool** parameter capped at **2,500 bps (25%)**; the table shows typical values, not fixed ones. For an exact number, read it on-chain: `lbPair.parameters.protocolShare` via the SDK (`DLMM.create(...)` then `pool.lbPair.parameters.protocolShare`, or `pool.getFeeInfo().protocolFeePercentage`). Do **not** trust the Data API's `pool_config.protocol_fee_pct` (it reports 5 on pools that are 1,000 bps = 10% on-chain) or the IDL constant `PROTOCOL_SHARE = 500`. Without SDK access, the realized ratio `protocol_fees / (fees + protocol_fees)` from the Data API is a good empirical check. The split:
 
 ```
 protocol_fee = floor( trading_fee × protocol_share / 10,000 )
@@ -179,8 +179,8 @@ Every dollar figure in that chain must come from a digest-backed API field or th
 | `MAX_FEE_RATE` (total fee cap) | 100,000,000 = 10% |
 | Variable-fee denominator | 100,000,000,000 (1e11) |
 | bps for 100% | 10,000 |
-| Standard `protocol_share` | 1,000 bps = 10% (LP keeps 90%) |
-| Launch `ILM_PROTOCOL_SHARE` | 2,000 bps = 20% (LP keeps 80%) |
+| Standard `protocol_share` (typical; per-pool — read on-chain) | 1,000 bps = 10% (LP keeps 90%) |
+| Launch `ILM_PROTOCOL_SHARE` (typical) | 2,000 bps = 20% (LP keeps 80%) |
 | Max `protocol_share` | 2,500 bps = 25% |
 | Referral `HOST_FEE_BPS` | 2,000 bps = 20% of protocol slice |
 | `LIMIT_ORDER_FEE_SHARE` | 5,000 bps = 50/50 |

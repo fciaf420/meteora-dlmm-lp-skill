@@ -75,7 +75,7 @@ Full `PoolResponse` top-level fields (this is the canonical pool shape, also ret
 - `created_at` — pool creation unix timestamp (int64).
 - `reward_mint_x`, `reward_mint_y` — farming reward mint addresses.
 - `pool_config` — `PoolConfig` (fees + bin step + fee mode).
-- `dynamic_fee_pct` — current rate = base fee + variable fee.
+- `dynamic_fee_pct` — documented as base fee + variable fee, but live values sit *below* `base_fee_pct` (e.g. 0.0008 vs 0.04), so don't use it as the total fee; compute the fee from on-chain parameters instead.
 - `tvl`, `current_price` — doubles.
 - `apr`, `apy` — 24-hour scalars.
 - `has_farm` (bool), `farm_apr`, `farm_apy` — LM reward scalars.
@@ -88,10 +88,10 @@ Full `PoolResponse` top-level fields (this is the canonical pool shape, also ret
 
 - `bin_step` — bin step in basis points (int32).
 - `base_fee_pct` — base fee rate (double).
-- `max_fee_pct` — the cap the dynamic fee cannot exceed.
-- `protocol_fee_pct` — the protocol's cut skimmed from the trade fee. LPs do NOT keep 100% of the swap fee; net LP fee is after this cut (10% standard pools, 20% launch pools — see mechanics).
+- `max_fee_pct` — documented as the fee cap, but live pools return `0.0`. Unreliable; the real cap is the program's `MAX_FEE_RATE` = 10%.
+- `protocol_fee_pct` — documented as the protocol's cut, but **unreliable**: it reports `5.0` on pools whose on-chain `protocolShare` is 1,000 bps (10%), and realized `protocol_fees / (fees + protocol_fees)` confirms ≈10%. Read `lbPair.parameters.protocolShare` via the SDK instead, or use that realized ratio. Typical values are 10% on standard pools and 20% on launch pools (see `fees-and-economics.md`).
 - `collect_fee_mode` — `0 = InputOnly` (fees flow to the deposited/input token), `1 = OnlyY` (fees always paid in token Y). Affects which token you accumulate.
-- Relationship: `dynamic_fee_pct` = `base_fee_pct` + variable fee, bounded above by `max_fee_pct`.
+- Documented relationship `dynamic_fee_pct = base_fee_pct + variable fee ≤ max_fee_pct` does **not** hold on live data (see the two fields above) — don't reason from it.
 
 ### TimeWindowData (shape of volume/fees/protocol_fees/fee_tvl_ratio)
 

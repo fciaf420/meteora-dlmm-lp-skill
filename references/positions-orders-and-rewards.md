@@ -230,5 +230,5 @@ Which token those fees arrive in is a **pool-level** setting, **Collect Fee Mode
 and Y) or `OnlyY` (single-sided "Quote Token Fee" — the pool collects fees only in token Y). This
 determines the *composition* of what an LP claims; the *magnitude* — how the base fee
 (`base_factor × bin_step × 10 × 10^base_fee_power_factor`, stored in 1e9 precision), the dynamic
-fee, and the protocol cut (**10% on standard DLMM pools, 20% on Launch Pools**, taken before LPs) —
+fee, and the protocol cut (typically **10% on standard DLMM pools, 20% on Launch Pools**, per-pool, taken before LPs) —
 combine into what LPs actually earn is worked out in `fees-and-economics.md`.
