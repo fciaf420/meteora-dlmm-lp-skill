@@ -85,6 +85,13 @@ amount_including = amount_excluding_fee + fee_amount
 
 Fee amounts round **up** (ceil), favoring the pool. Form B's `(1e9 − total_fee_rate)` denominator is why grossing a fee back up from a net amount isn't just "× rate" — mind it when reverse-engineering a trader's fee from an output amount.
 
+**Price-impact guard** (program-only, per Meteora's formulas doc; the SDK exposes only the input, `swapWithPriceImpact({ priceImpact })` in bps, not the math). Some swap flows carry a max price impact, checked against a guard price derived from the active bin:
+
+```
+X→Y: minimum price         = P_active × (10,000 − max_price_impact_bps) / 10,000
+Y→X: maximum effective price = P_active × 10,000 / (10,000 − max_price_impact_bps)
+```
+
 ## Protocol and host split — model this or your net yield is wrong
 
 The protocol takes its cut **before LPs see anything**. This is the single most common omission in naive fee-APR math, so always net it out — **but only once**. The Data API's `fees`, `fee_tvl_ratio`, and `apr` are **already LP-net** (`fees + protocol_fees = volume × total_fee_rate`; live check: `protocol_fees / (fees + protocol_fees)` ≈ 0.10 on standard pools). Apply the LP share only to a **gross** figure you computed yourself (`volume × fee_rate`, or `fees + protocol_fees`), never to API fee/APR fields.
@@ -105,6 +112,14 @@ The launch-pool double-cut matters: launch LPing is often pitched as "extremely 
 
 **Referral / host fee** is carved from the *protocol's* slice, never from the LP's. When a swap routes through a referral account, the host gets **20%** of the protocol fee (`HOST_FEE_BPS` = 2,000 bps); with no referral account the host fee is 0 and the whole protocol slice stays with the treasury. Because it comes out of the protocol portion, it does **not** change LP take.
 
+```
+host_fee                 = floor( protocol_fee × 2,000 / 10,000 )     # 0 without a referral account
+protocol_fee_remainder   = protocol_fee − host_fee
+trading_fee              = LP_fee + protocol_fee_remainder + host_fee  # liquidity-mining pools (all fills are MM)
+```
+
+On limit-order pools the host fee also takes a capped slice of the limit-order protocol fee — see "Native limit-order fee split" below.
+
 **Net-yield formula the advisor should use:**
 
 ```
@@ -124,6 +139,21 @@ composition_fee = floor( Δamount × total_fee_rate × (1e9 + total_fee_rate) / 
 Protocol share is then skimmed from the composition fee just like a swap fee (`floor(composition_fee × protocol_share / 10,000)`). Critically, there is **no composition fee** when depositing into an **empty bin** or any **non-active bin** — only the active bin, and only when the deposit shifts its composition.
 
 Advise LPs to avoid it two ways: **match the active bin's current X:Y ratio** when depositing at the active price, or **place liquidity outside the active bin** (e.g., single-sided ranges above/below current price). This is a real, easily-overlooked cost on entry and on any rebalance that tops up the active bin — flag it whenever a user proposes an off-ratio deposit at the current price.
+
+## Liquidity shares and withdrawal rounding
+
+Deposits mint per-bin liquidity shares; withdrawals burn them pro rata. Both round **down**, favoring the pool:
+
+```
+L_in  = P · x_in + y_in                     # y is Q64.64-scaled (× 2^64) in share math
+share = L_in                                 # bin has no liquidity supply yet
+share = floor( L_in × liquidity_supply / L_bin )   # bin already has liquidity
+
+out_x = floor( share × bin_amount_x / liquidity_supply )   # withdrawal
+out_y = floor( share × bin_amount_y / liquidity_supply )
+```
+
+That floor on each bin, summed across a wide position, is why a full withdrawal can come back a few base units short of a naive pro-rata estimate.
 
 ## Collect Fee Mode — which token your fees arrive in
 
@@ -152,12 +182,29 @@ Two mechanics drive the "stay in range" advice:
 
 ## Native limit-order fee split
 
-On limit-order-mode pools, the portion of a fill served by limit-order liquidity splits **50/50** between the order participant and the protocol (`LIMIT_ORDER_FEE_SHARE` = 5,000 bps):
+On limit-order-mode pools a fill can come from MM positions, limit orders, or both in the same bin. The program first splits the trading fee **by liquidity source** (rounding favors MM — the MM share is rounded **up**), then splits each slice by recipient. The limit-order slice splits **50/50** between the order participant and the protocol (`LIMIT_ORDER_FEE_SHARE` = 5,000 bps), whatever the pool's `protocol_share`:
 
 ```
+total_MM_fee                = ceil( trading_fee × MM_amount_in / total_amount_in )
+total_limit_order_fee       = trading_fee − total_MM_fee
+
+MM_protocol_fee             = floor( total_MM_fee × protocol_share / 10,000 )
+MM_LP_fee                   = total_MM_fee − MM_protocol_fee
+
 limit_order_participant_fee = floor( total_limit_order_fee × 5,000 / 10,000 )
-limit_order_protocol_fee    = total_limit_order_fee − participant_fee
+limit_order_protocol_fee    = total_limit_order_fee − limit_order_participant_fee
+
+# host fee (referral swaps only; otherwise 0)
+host_fee_on_limit_order     = min( floor( floor(total_limit_order_fee × protocol_share / 10,000) × 2,000 / 10,000 ),
+                                   limit_order_protocol_fee )
+host_fee                    = floor( MM_protocol_fee × 2,000 / 10,000 ) + host_fee_on_limit_order
+protocol_fee_remainder      = MM_protocol_fee + limit_order_protocol_fee − host_fee
+
+# full identity
+trading_fee = MM_LP_fee + limit_order_participant_fee + protocol_fee_remainder + host_fee
 ```
+
+The source split and the MM/LO recipient splits match the SDK's quote math (`commons/src/quote.rs` `split_fee`). The **host-fee cap on the limit-order slice is documented by Meteora but not verifiable in the public SDK** (the SDK has no limit-order host-fee path, and the program source is not public). With no limit-order fill, `total_limit_order_fee = 0` and everything reduces to the liquidity-mining formulas above.
 
 This is a distinct economic path from MM LPing — a limit-order participant keeps 50% of the fee on the slice their order fills, not the 90%/80% an MM LP keeps. Only relevant on pools whose function mode is limit-order (a pool is liquidity-mining XOR limit-order, never both).
 

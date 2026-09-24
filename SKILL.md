@@ -45,7 +45,7 @@ detail is deferred to six references. Read the matching file when the trigger fi
 |---|---|
 | `references/use-case-playbooks.md` | The user wants a concrete strategy recipe (a specific goal: stable-pair yield, blue-chip LP, memecoin launch, DCA, take-profit) with setup + management + exit steps. |
 | `references/data-api.md` | You need exact endpoint params, enums, defaults, or response field names before making a call. |
-| `references/fees-and-economics.md` | You are computing net yield, base/variable-fee math, the composition fee, protocol split, or LM reward math. |
+| `references/fees-and-economics.md` | You are computing net yield, base/variable-fee math, the composition fee, protocol/host/limit-order fee split, share or withdrawal rounding, the price-impact guard, or LM reward math. |
 | `references/positions-orders-and-rewards.md` | The question touches position resizing, native limit orders, liquidity-mining rewards, Token-2022 diligence, operator/fee-owner delegation, or lock releases. |
 | `references/launch-pools-and-terminal.md` | The user is LPing a launch/memecoin pool, seeding one, or driving the Dynamic Terminal UI (Ape In, Zap Out, Sync-with-Jupiter, Alpha Vault). |
 | `references/sdk-and-troubleshooting.md` | The user wants to execute via the TypeScript SDK/CLI or decode an on-chain error. |
