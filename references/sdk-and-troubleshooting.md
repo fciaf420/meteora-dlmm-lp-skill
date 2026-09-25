@@ -52,7 +52,7 @@ Load a pool with `DLMM.create(connection, poolAddress, { cluster })`; batch with
 
 ## Fee & collect-mode flags (on-chain)
 
-- **`protocol_share`** (basis points, on `StaticParameters`) is skimmed from the total swap fee **before** LPs receive anything — 10% on standard DLMM pools, 20% on Launch Pools. Compute LP fee APR net of this cut.
+- **`protocol_share`** (basis points, on `StaticParameters`) is skimmed from the total swap fee **before** LPs receive anything — typically 10% on standard DLMM pools, 20% on Launch Pools, but it is per-pool: read `lbPair.parameters.protocolShare` (or `getFeeInfo().protocolFeePercentage`) rather than assuming. Compute LP fee APR net of this cut (Data API `fees` / `apr` already are; only a self-computed `volume × fee_rate` needs it).
 - **`collect_fee_mode`**: `0` = fees collected in the **input token(s)** (either side possible); `1` = fees collected **only in token Y**. This decides which token accrued fees arrive in.
 - Each bin stores `amount_x` / `amount_y` **already net of protocol fees**, and fees accrue **per bin** (`fee_amount_x/y_per_token_stored`) — bins price never trades through earn nothing.
 

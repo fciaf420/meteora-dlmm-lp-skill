@@ -34,7 +34,7 @@ Each `PositionV2` stores:
 
 A position starts with the **default 70-bin layout** (70 inline liquidity shares, fee checkpoints,
 and reward checkpoints). Ranges wider than 70 bins append extra per-bin data (`PositionBinData`)
-after that header, up to a **maximum of 1,400 bins**. Note that a bin **array** is also 70 bins —
+after that header, up to a **maximum of 1,400 bins** (the program constant `POSITION_MAX_LENGTH`). Note that a bin **array** is also 70 bins —
 `MAX_BIN_PER_ARRAY = 70` — so the default position exactly fills one array's worth of bins. (The
 commonly cited "69" is the UI's *default range width*, not the account's bin capacity; the account
 number is 70.)
@@ -230,5 +230,5 @@ Which token those fees arrive in is a **pool-level** setting, **Collect Fee Mode
 and Y) or `OnlyY` (single-sided "Quote Token Fee" — the pool collects fees only in token Y). This
 determines the *composition* of what an LP claims; the *magnitude* — how the base fee
 (`base_factor × bin_step × 10 × 10^base_fee_power_factor`, stored in 1e9 precision), the dynamic
-fee, and the protocol cut (**10% on standard DLMM pools, 20% on Launch Pools**, taken before LPs) —
+fee, and the protocol cut (typically **10% on standard DLMM pools, 20% on Launch Pools**, per-pool, taken before LPs) —
 combine into what LPs actually earn is worked out in `fees-and-economics.md`.

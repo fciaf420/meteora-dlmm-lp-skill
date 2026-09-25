@@ -45,7 +45,7 @@ detail is deferred to six references. Read the matching file when the trigger fi
 |---|---|
 | `references/use-case-playbooks.md` | The user wants a concrete strategy recipe (a specific goal: stable-pair yield, blue-chip LP, memecoin launch, DCA, take-profit) with setup + management + exit steps. |
 | `references/data-api.md` | You need exact endpoint params, enums, defaults, or response field names before making a call. |
-| `references/fees-and-economics.md` | You are computing net yield, base/variable-fee math, the composition fee, protocol split, or LM reward math. |
+| `references/fees-and-economics.md` | You are computing net yield, base/variable-fee math, the composition fee, protocol/host/limit-order fee split, share or withdrawal rounding, the price-impact guard, or LM reward math. |
 | `references/positions-orders-and-rewards.md` | The question touches position resizing, native limit orders, liquidity-mining rewards, Token-2022 diligence, operator/fee-owner delegation, or lock releases. |
 | `references/launch-pools-and-terminal.md` | The user is LPing a launch/memecoin pool, seeding one, or driving the Dynamic Terminal UI (Ape In, Zap Out, Sync-with-Jupiter, Alpha Vault). |
 | `references/sdk-and-troubleshooting.md` | The user wants to execute via the TypeScript SDK/CLI or decode an on-chain error. |
@@ -69,8 +69,9 @@ and its **Collect Fee Mode** (InputOnly vs OnlyY — sets which token your fees 
 ### Step 2 — Pool selection from data
 A pair usually has several pools at different bin steps. Compare the variants on the numbers, not vibes:
 `volume["24h"]`, `fee_tvl_ratio["24h"]`, `apr`, and `farm_apr` (if `has_farm`). The best pick is normally
-the highest `fee_tvl_ratio["24h"]` at a bin step that matches the pair's volatility — but read APR **net
-of the protocol cut** (10% standard / 20% launch), since the raw fee figure is pre-split. → `references/data-api.md`
+the highest `fee_tvl_ratio["24h"]` at a bin step that matches the pair's volatility. The API's `fees`,
+`fee_tvl_ratio`, and `apr` are **already net of the protocol cut** (it is reported separately in `protocol_fees`)
+— never deduct it again from API figures. → `references/data-api.md`
 
 ### Step 3 — Shape, range, and sidedness
 Pick a liquidity shape against the user's market thesis, a range wide enough to survive expected movement,
@@ -78,8 +79,9 @@ and decide one-sided vs two-sided. Narrower = more fees while in range but out-o
 lower fees per dollar but more durable. → concepts below, then `references/use-case-playbooks.md`
 
 ### Step 4 — Model NET yield
-Fee earnings are **not** the raw swap fee. Subtract the protocol cut (LP keeps **90%** standard / **80%**
-launch), remember the total swap fee is **hard-capped at 10%** (`MAX_FEE_RATE`) no matter how high
+Fee earnings are **not** the raw swap fee. Apply the LP share (typically **90%** standard / **80%** launch)
+**only to a gross `volume × fee_rate` figure you computed yourself** — API `fees` / `fee_tvl_ratio` / `apr` already
+exclude the protocol cut, so never haircut them again. Remember the total swap fee is **hard-capped at 10%** (`MAX_FEE_RATE`) no matter how high
 volatility drives it, and warn about the **composition fee** on off-ratio deposits into the active bin.
 → `references/fees-and-economics.md`
 
@@ -122,10 +124,10 @@ Range mechanics:
 - The **program default position layout is 70 bins**, not 69 (a bin array is 70 bins; the Dynamic Terminal's
   add-liquidity slider centers ~69 bins on the active price, which is a UI detail, not the program default).
 - Positions extend via the dynamic **PositionV2** account (`increase_position_length`), bounded by the pool's
-  min/max bin IDs. The **1,400-bin figure is the maximum supported position length** (UI/terminal ceiling),
-  **not a hard per-transaction or program cap**.
+  min/max bin IDs, up to the program constant `POSITION_MAX_LENGTH` = **1,400 bins** per position. Growth past the
+  default 70 bins is capped at **91 added bins per `increase_position_length` instruction**, so wide ranges need several.
 - The real hard cap that constrains you is the **bin step: 400 bps program maximum**.
-- Range math on a centered 70-bin layout: ≈ **±8.5% at 25 bps**, ≈ **±35% at 100 bps**. Wider bin step ⇒
+- Range math on a centered 70-bin layout (geometric, so asymmetric): **+9.1% / −8.4% at 25 bps**, **+41.7% / −29.4% at 100 bps**. Wider bin step ⇒
   same bin count covers far more price.
 
 ### Bin-step selection
@@ -148,9 +150,10 @@ Three base distributions, plus named UI presets built from them (choose against 
   - **Spot-Concentrated (1–3 bins)** — maximum concentration at a tight peg; **highest out-of-range risk**, needs close monitoring.
   - **Spot-Spread (20–30 bins)** — balances fee capture with breathing room; can still go out of range in a strong trend.
   - **Spot-Wide (~50 bins)** — durable coverage, rebalance less often; **lower fee capture per dollar** because liquidity is thin per bin.
-- **Curve** — concentrated near the center/active price. Highest efficiency when price holds; falls off at
-  the edges; most exposed to IL if price trends away. Best for stable/pegged pairs and high-conviction ranges.
-- **Bid-Ask** — inverse curve, liquidity heaviest at the edges. Captures volatility spikes and is the natural
+- **Curve** — peaks at the **active bin** at deposit time and tapers linearly toward both edges (SDK behavior; this
+  is the range middle only if the range is centered on the active bin). Highest efficiency when price holds;
+  most exposed to IL if price trends away. Best for stable/pegged pairs and high-conviction ranges.
+- **Bid-Ask** — Curve's mirror image: lightest at the active bin, rising linearly to the edges. Captures volatility spikes and is the natural
   shape for single-sided DCA. More advanced; may sit idle until price reaches an edge bin.
 
 The right shape is a market view: a narrow position earns more in range but goes inactive faster; a wide one
@@ -170,14 +173,15 @@ Two components determine what a swap pays:
 - **Base Fee** = **base_factor × bin_step × 10 × 10^base_fee_power_factor** (result stored in **1e9
   precision**). The **× 10** scale factor is easy to drop by accident; without it every
   base-fee estimate comes out **10× too low**. Base fee is the pool's minimum swap fee,
-  set at creation; higher bin step ⇒ higher base fee.
+  set at creation but not immutable (bounded 0.01%–10%; an operator can change it later); higher bin step ⇒ higher base fee.
 - **Variable Fee** scales with **(volatility_accumulator × bin_step)²** — the square means high-bin-step pools
   escalate fees far faster under volatility. It rises as swaps cross bins and decays over `filter_period` /
   `decay_period` when activity cools ("surge pricing"). Some pools set variable-fee control to 0 (no variable fee).
 - **Hard cap:** total fee = `min(base + variable, MAX_FEE_RATE)`, and **`MAX_FEE_RATE` = 10%**. On-chain an LP
   never sees a total swap fee above 10%, however wild the volatility.
-- **Protocol takes its cut BEFORE LPs:** **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools (LP
-  keeps 80%)**. Always quote LP yield net of this — launch LPing is not pure upside.
+- **Protocol takes its cut BEFORE LPs:** typically **10% on standard pools (LP keeps 90%)**, **20% on Launch Pools
+  (LP keeps 80%)**, but it is per-pool — read `lbPair.parameters.protocolShare` on-chain for the exact value. Always quote LP yield net of this — launch LPing is not pure upside. Data API fee/APR fields
+  are already net; apply the LP share only to gross `volume × fee_rate` you computed yourself.
 - **Composition fee warning:** adding an **off-ratio** deposit into the **active bin** (a token mix differing
   from the bin's current X:Y ratio) is charged a composition fee, because it acts like a forced mini-swap. No
   composition fee on empty or non-active bins. To avoid it, match the active bin's ratio or add outside the active bin.
@@ -220,7 +224,7 @@ Dynamic fees tip this toward you in volatile periods but never eliminate IL — 
 Pools built for token launches: single-sided seeding (bootstrap with only the project token), an **activation
 point** (slot or timestamp when trading begins), dynamic fees that start high during the initial sniper/volatility
 window and cool as the market settles, and optional **Alpha Vault** anti-bot pre-buys. Note: the **protocol
-cut DOUBLES to 20%** (LP keeps 80%), and the **total fee is still capped at 10%** — high early fees are real but
+cut typically DOUBLES to 20%** (LP keeps 80%), and the **total fee is still capped at 10%** — high early fees are real but
 bounded and taxed harder. Wider bin steps (100+ bps) and Spot/Bid-Ask survive price discovery better than Curve.
 Only deploy risk capital you can lose. → `references/launch-pools-and-terminal.md`
 
@@ -283,8 +287,8 @@ by `30m`/`1h`/`2h`/`4h`/`12h`/`24h`. Read `volume["24h"]`, `fees["24h"]`, `fee_t
 scalar `trade_volume_24h`, `fees_24h`, or scalar `fee_tvl_ratio` fields. `apr`/`apy` are 24h scalars; `farm_apr`/
 `farm_apy` exist when `has_farm`. Always name the window when quoting a ratio (e.g. `fee_tvl_ratio["24h"] = 0.8%`).
 Pool parameters (`bin_step`, `base_fee_pct`, `max_fee_pct`, `protocol_fee_pct`, `collect_fee_mode`) sit nested under
-`pool_config`, not at the top level. Note: live `pool_config.protocol_fee_pct` can differ from the documented standard
-(pools have been observed at 5%) — quote the live value, it is per-pool configuration.
+`pool_config`, not at the top level. Do **not** trust `pool_config.protocol_fee_pct` (it reports 5 on pools that are 10%
+on-chain), `max_fee_pct`, or `dynamic_fee_pct`. Read the protocol share on-chain → `references/fees-and-economics.md`.
 
 ### Data-driven rebalance signal
 Do not eyeball it. Pull `/portfolio/open` → read `positionsOutOfRange[]` / `outOfRange`, or pull
@@ -296,7 +300,7 @@ read `isOutOfRange`. `feePerTvl24h` tells you whether the position is actually e
 # ANSWERING COMMON QUESTIONS
 
 **"What APR can I expect?"** Never promise one. Fetch the pool and quote real `apr`, `fee_tvl_ratio["24h"]`, and
-`farm_apr` — then state it **net of the 10% / 20% protocol cut** and note the fee upside is capped at 10% total.
+`farm_apr` — these are **already net of the protocol cut** (don't deduct it again) — and note the fee upside is capped at 10% total.
 APR follows volume through *your* bins, which can dry up.
 
 **"Should I rebalance now?"** Now answerable from data: pull `/portfolio/open` (`positionsOutOfRange[]`, `outOfRange`)

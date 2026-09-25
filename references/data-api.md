@@ -60,6 +60,8 @@ Recipe for "which pool for pair X?": call `/pools?filter_by=token_x=<mintA> %26%
 
 On the pool object, `volume`, `fees`, `fee_tvl_ratio`, and `protocol_fees` are **`TimeWindowData` objects keyed by `30m/1h/2h/4h/12h/24h`** — not scalars. Read `volume["24h"]`, `fee_tvl_ratio["24h"]`, `fees["24h"]`.
 
+**`fees` is the LP share, already net of the protocol cut** — `fees + protocol_fees = volume × fee rate`, so `fee_tvl_ratio` (= `fees / tvl`) and `apr` are net too. Never apply the 90%/80% LP share to these fields.
+
 There is **NO `trade_volume_24h` and NO `fees_24h` field** — those names do not exist. When you quote a fee/TVL ratio, always name its window, e.g. `fee_tvl_ratio["24h"] = 0.8%`, because the same object also carries `fee_tvl_ratio["1h"]` etc.
 
 `apr` and `apy` ARE scalars — both are 24-hour figures. `farm_apr`/`farm_apy` (LM rewards) exist and are scalars too.
@@ -73,7 +75,7 @@ Full `PoolResponse` top-level fields (this is the canonical pool shape, also ret
 - `created_at` — pool creation unix timestamp (int64).
 - `reward_mint_x`, `reward_mint_y` — farming reward mint addresses.
 - `pool_config` — `PoolConfig` (fees + bin step + fee mode).
-- `dynamic_fee_pct` — current rate = base fee + variable fee.
+- `dynamic_fee_pct` — documented as base fee + variable fee, but live values sit *below* `base_fee_pct` (e.g. 0.0008 vs 0.04), so don't use it as the total fee; compute the fee from on-chain parameters instead.
 - `tvl`, `current_price` — doubles.
 - `apr`, `apy` — 24-hour scalars.
 - `has_farm` (bool), `farm_apr`, `farm_apy` — LM reward scalars.
@@ -86,10 +88,10 @@ Full `PoolResponse` top-level fields (this is the canonical pool shape, also ret
 
 - `bin_step` — bin step in basis points (int32).
 - `base_fee_pct` — base fee rate (double).
-- `max_fee_pct` — the cap the dynamic fee cannot exceed.
-- `protocol_fee_pct` — the protocol's cut skimmed from the trade fee. LPs do NOT keep 100% of the swap fee; net LP fee is after this cut (10% standard pools, 20% launch pools — see mechanics).
+- `max_fee_pct` — documented as the fee cap, but live pools return `0.0`. Unreliable; the real cap is the program's `MAX_FEE_RATE` = 10%.
+- `protocol_fee_pct` — documented as the protocol's cut, but **unreliable**: it reports `5.0` on pools whose on-chain `protocolShare` is 1,000 bps (10%), and realized `protocol_fees / (fees + protocol_fees)` confirms ≈10%. Read `lbPair.parameters.protocolShare` via the SDK instead, or use that realized ratio. Typical values are 10% on standard pools and 20% on launch pools (see `fees-and-economics.md`).
 - `collect_fee_mode` — `0 = InputOnly` (fees flow to the deposited/input token), `1 = OnlyY` (fees always paid in token Y). Affects which token you accumulate.
-- Relationship: `dynamic_fee_pct` = `base_fee_pct` + variable fee, bounded above by `max_fee_pct`.
+- Documented relationship `dynamic_fee_pct = base_fee_pct + variable fee ≤ max_fee_pct` does **not** hold on live data (see the two fields above) — don't reason from it.
 
 ### TimeWindowData (shape of volume/fees/protocol_fees/fee_tvl_ratio)
 
@@ -113,7 +115,7 @@ Combine with pool-level `is_blacklisted`, `tags[]`, and `launchpad` before advis
 | `GET /pools/{address}/ohlcv` | `timeframe` (`5m 30m 1h 2h 4h 12h 24h`, default `24h`), `start_time`, `end_time` (unix seconds, inclusive) | `timestamp`, `timestamp_str`, `open`, `high`, `low`, `close`, `volume` |
 | `GET /pools/{address}/volume/history` | same params | `timestamp`, `timestamp_str`, `volume`, `fees`, `protocol_fees` |
 
-Range rules: both bounds given → `[start,end]`; one given → the other inferred from `timeframe`; neither → default range from `timeframe`. Use OHLCV to read realized price range/volatility before recommending range width or a rebalance; use volume/history to spot a trend (rising volume → healthier fee outlook; falling → consider exit). `protocol_fees` is broken out separately, so LP-realizable fee tracks `fees − protocol_fees`. For launch-spike detection, pull short windows (`5m`/`30m`/`1h`) — the launch fee/volume spike is invisible in the 24h number.
+Range rules: both bounds given → `[start,end]`; one given → the other inferred from `timeframe`; neither → default range from `timeframe`. Use OHLCV to read realized price range/volatility before recommending range width or a rebalance; use volume/history to spot a trend (rising volume → healthier fee outlook; falling → consider exit). `protocol_fees` is broken out separately and `fees` is already LP-net: LP-realizable fee = `fees`, gross = `fees + protocol_fees`. For launch-spike detection, pull short windows (`5m`/`30m`/`1h`) — the launch fee/volume spike is invisible in the 24h number.
 
 ## Position P&L — `GET /positions/{pool_address}/pnl`
 
@@ -154,7 +156,7 @@ These are split by position lifecycle, NOT a single overview. Choose deliberatel
   - **`outOfRange`** (bool|null) — true if ANY of the user's positions in the pool is out of range; null = undetermined.
   - **`positionsOutOfRange[]`** — the out-of-range position addresses (your primary rebalance signal).
   - Top-level response also carries `total?` (`TotalMetrics`) and `totalPositions`.
-- **`GET /portfolio?user=<wallet>`** — pools where the user has CLOSED positions ONLY, sorted `last_closed_at` DESC. This is NOT a general overview. Params: `user` (required), `page`, `page_size`, `days_back`. The doc contradicts itself on defaults (prose: `page_size` default 120/max 365, `days_back` default 90; OpenAPI schema: `page_size` default 20/max 50, `days_back` default 120) — so **pass explicit `page`/`page_size`/`days_back`** rather than trusting defaults. Each `PoolPortfolioItem` gives realized `totalDeposit`/`totalWithdrawal`/`totalFee` (+Sol), `pnlUsd`, `pnlSol`, `pnlPctChange`, `lastClosedAt`. Drill into `/positions/{pool_address}/pnl?user=<wallet>&status=closed` for per-position detail.
+- **`GET /portfolio?user=<wallet>`** — pools where the user has CLOSED positions ONLY, sorted `last_closed_at` DESC. This is NOT a general overview. Params: `user` (required), `page`, `page_size`, `days_back`. The doc contradicts itself on defaults (prose: `page_size` default 120/max 365, `days_back` default 90; OpenAPI schema: `page_size` default 20/max 50, `days_back` default 365, min 1/max 365) — so **pass explicit `page`/`page_size`/`days_back`** rather than trusting defaults. Each `PoolPortfolioItem` gives realized `totalDeposit`/`totalWithdrawal`/`totalFee` (+Sol), `pnlUsd`, `pnlSol`, `pnlPctChange`, `lastClosedAt`. Drill into `/positions/{pool_address}/pnl?user=<wallet>&status=closed` for per-position detail.
 - **`GET /portfolio/total?user=<wallet>`** — all-time total PnL across the portfolio (aggregates closed positions). Params: `user` (required). Response: `totalPnlUsd`, `totalPnlSol`, `totalPnlPctChange`, `totalPnlSolPctChange` (all strings).
 
 ## Realized claims — `GET /wallets/{wallet}/pools/{pool_address}/total_claims`

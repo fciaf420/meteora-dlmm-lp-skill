@@ -4,7 +4,7 @@ Read this when the user has a stated intent — "I want to LP SOL/USDC", "DCA ou
 
 Two rules override every recipe below:
 
-- **All fee expectations here are NET of the protocol cut.** The protocol skims its share off the total swap fee *before* LPs receive anything: 10% on standard DLMM pools (you keep 90%), 20% on Launch Pools (you keep 80%). Any APR you quote or model must already have this subtracted — see "Model true net LP fee yield" and `fees-and-economics.md`.
+- **All fee expectations here are NET of the protocol cut.** The protocol skims its share off the total swap fee *before* LPs receive anything: typically 10% on standard DLMM pools (you keep 90%), 20% on Launch Pools (you keep 80%). Data API `fees` / `fee_tvl_ratio` / `apr` already have it subtracted — quote them as-is. Apply the LP share only to a gross `volume × fee_rate` you computed yourself — see "Model true net LP fee yield" and `fees-and-economics.md`.
 - **Always fetch live pool data before committing capital.** These recipes tell you *what shape* to use; only the live pool — bin step, volume, `fee_tvl_ratio["24h"]`, `has_farm`, `collect_fee_mode`, function mode, Token-2022 status — tells you *whether this pool is worth it*. Pull it first; see the data-driven playbooks at the end and `data-api.md`.
 
 **Uniform template.** Every playbook uses the same five parts so you can lift a whole recipe into a conversation:
@@ -131,7 +131,7 @@ Two hard limits several playbooks lean on, worth memorizing: the total swap fee 
 
 - **When:** You expect price to swing hard and want to earn the most precisely on those swings out to the extremes, whether on a volatile pair or a wobbling pegged pair.
 - **Setup:**
-  - **Bid-Ask** shape — it concentrates liquidity at the *edges* of your range (the inverse of Curve), so the big fees land when price lurches out to a boundary bin.
+  - **Bid-Ask** shape — it concentrates liquidity at the *edges* of your range (Curve's mirror image: lightest at the active bin, heaviest at the edges), so the big fees land when price lurches out to a boundary bin.
   - Size the range around where you expect the swings to reach.
   - A larger bin step lets the variable fee escalate faster — the variable fee scales with the square of both volatility and bin step.
 - **Management:**
@@ -203,11 +203,12 @@ Two hard limits several playbooks lean on, worth memorizing: the total swap fee 
 
 - **When:** The user quotes or asks about an APR, or you're comparing pools on fee yield. Never repeat a gross number as if the LP keeps it.
 - **Setup:**
-  - Net fee = gross swap fee × LP share, where LP share is **90%** on standard pools and **80%** on Launch Pools.
+  - Data API `fees`, `fee_tvl_ratio`, and `apr` / `apy` are **already net** of the protocol cut (`fees + protocol_fees = volume × fee_rate`). Quote them as-is — never multiply them by the LP share.
+  - Only a gross figure you computed yourself needs the haircut: net fee = `volume × fee_rate × LP share`, where LP share is typically **90%** on standard pools and **80%** on Launch Pools.
   - The pool object's `apr` / `apy` are 24h scalars; treat them as inputs to sanity-check, not gospel.
 - **Management:**
-  - Worked adjustment — forget the cut and you overstate real yield by 10% of the figure on a standard pool (a 50% gross-fee APR is ~45% net) and by 20% on a Launch Pool (50% gross → 40% net).
-  - Always state the number you give as net, and say which share you applied.
+  - Worked adjustment (self-computed gross only) — forget the cut and you overstate real yield by 10% of the figure on a standard pool (a 50% gross-fee APR is ~45% net) and by 20% on a Launch Pool (50% gross → 40% net). The reverse error is just as real: haircutting an API `apr` of 45% down to ~40.5% double-counts the cut.
+  - Always state the number you give as net, and say where it came from (API field, or gross × which share).
 - **Exit & risks:**
   - The bigger error is treating past fee APR as a promise — fee earnings depend on volume through *your* bins, and volume can dry up.
   - Present net yield as conditional on the pool staying active and price staying in range. Cross-link: `fees-and-economics.md`.
